@@ -1,0 +1,7 @@
+# Read by rustup on the development machine and in CI, so both build with
+# the same compiler. The Docker build names the same version itself
+# (docker/Dockerfile) and needs none of the components.
+[toolchain]
+channel = "1.99.1"
+profile = "minimal"
+components = ["rustfmt", "clippy", "rust-src", "rust-analyzer", "llvm-tools"]

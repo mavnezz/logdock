@@ -1,0 +1,50 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+# Internal crates. Which crate may depend on which is documented in
+# docs/architecture.md, section 9, and checked by logdock-architecture.
+logdock-api = { path = "crates/logdock-api" }
+logdock-infra = { path = "crates/logdock-infra" }
+logdock-kernel = { path = "crates/logdock-kernel" }
+logdock-retention = { path = "crates/logdock-retention" }
+
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+http-body-util = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# SQLite is bundled, so every build runs against the same, known version
+# (libsqlite3-sys compiles it with FTS5).
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "macros"] }
+# Free space of the data directory (statvfs).
+rustix = { version = "1.1", features = ["fs"] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time", "io-util", "sync"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.7", features = ["trace", "request-id", "util", "fs", "set-header"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+utoipa = "6"
+utoipa-axum = "0.3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

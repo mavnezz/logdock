@@ -1,0 +1,25 @@
+# Logdock as it runs on a server, behind the existing reverse proxy:
+#
+#   cp .env.example .env      # set LOGDOCK_PUBLIC_URL at least
+#   mkdir -p data
+#   docker compose up -d --build
+#
+# The data directory is a bind mount owned by PUID:PGID, so the container
+# needs no root at all. See docs/operations.md.
+services:
+  logdock:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: logdock:local
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${LOGDOCK_BIND:-127.0.0.1}:${LOGDOCK_PORT:-8080}:8080"
+    volumes:
+      - "${LOGDOCK_DATA:-./data}:/data"
+    # Longer than LOGDOCK_SHUTDOWN_TIMEOUT, so the queue is drained.
+    stop_grace_period: 30s
