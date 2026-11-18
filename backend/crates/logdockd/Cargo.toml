@@ -9,8 +9,10 @@ publish.workspace = true
 
 [dependencies]
 logdock-api.workspace = true
+logdock-identity.workspace = true
 logdock-infra.workspace = true
 logdock-kernel.workspace = true
+logdock-projects.workspace = true
 logdock-retention.workspace = true
 anyhow.workspace = true
 axum.workspace = true

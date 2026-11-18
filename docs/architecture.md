@@ -111,6 +111,8 @@ and are checked against the benchmark in 5.6.
 | `LOGDOCK_INGEST_MAX_DECOMPRESSED` | `20MiB` | request body after decompression |
 | `LOGDOCK_INGEST_QUEUE` | `100000` | items waiting for the writer |
 | `LOGDOCK_SHUTDOWN_TIMEOUT` | `20s` | time to drain the queue on SIGTERM |
+| `LOGDOCK_SESSION_IDLE`, `LOGDOCK_SESSION_LIFETIME` | `12h`, `7d` | when sessions end |
+| `LOGDOCK_SETUP_CODE` | random | the first setup's code, for automated setups |
 | `LOGDOCK_SMTP_URL` | – | notifications by e-mail |
 | `PUID`, `PGID` | `1000` | owner of the data directory |
 
@@ -427,7 +429,8 @@ Patterns in free text catch only what they describe. They lower the risk; they d
   - a session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) and a CSRF token;
   - throttling of failed sign-ins;
   - [Later] two-factor sign-in with TOTP, as in zendiloOS.
-- **First start.** `logdockd` writes a one-time setup code to its log. Whoever has it creates the first administrator.
+- **First start.** `logdockd` writes a one-time setup code to its log (or takes `LOGDOCK_SETUP_CODE`). Whoever has
+  it creates the first administrator at `/setup`.
 - **Roles.** Administrators manage accounts, projects, keys and settings. Members read everything: all projects and
   all stages (decided for R1). [Later] Read rights per project and stage. The schema keeps reads behind one permission
   check, so this can be added without touching every query.

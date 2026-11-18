@@ -6,9 +6,9 @@
 //! that document. Everything that is not the API is the web interface's
 //! static files.
 
+mod auth;
+mod dto;
 mod error;
-// The extractors serve the routes of the following steps.
-#[allow(dead_code)]
 mod extract;
 mod routes;
 mod state;
@@ -23,9 +23,11 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::OpenApi;
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 
+pub use auth::CSRF_HEADER;
 pub use error::{ApiError, Problem};
 pub use extract::Cidr;
 pub use state::{ApiConfig, ApiState, UseCases};
@@ -38,9 +40,31 @@ pub const API_V1: &str = "/api/v1";
     info(title = "Logdock API", description = "API of Logdock's web interface."),
     tags(
         (name = "system", description = "Health, version and storage"),
-    )
+        (name = "auth", description = "The first setup, sign-in, the session and the caller's own account"),
+        (name = "accounts", description = "Accounts and the audit log, for administrators"),
+        (name = "projects", description = "Projects, their stages, ingest keys, settings and ingest counts"),
+    ),
+    modifiers(&SessionSecurity)
 )]
 struct ApiDoc;
+
+/// Documents the session cookie. Operations that need it say
+/// `security(("session" = []))`; those that change something also need the
+/// session's CSRF token in `X-CSRF-Token`.
+struct SessionSecurity;
+
+impl Modify for SessionSecurity {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        let components = openapi.components.get_or_insert_with(Default::default);
+        components.add_security_scheme(
+            "session",
+            SecurityScheme::ApiKey(ApiKey::Cookie(ApiKeyValue::with_description(
+                "__Host-logdock_session",
+                "Set by sign-in or setup. Named `logdock_session` where secure cookies are off.",
+            ))),
+        );
+    }
+}
 
 fn api() -> OpenApiRouter<ApiState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi()).merge(routes::health::routes()).nest(API_V1, routes::v1())

@@ -10,9 +10,12 @@ publish.workspace = true
 # Primary adapter: calls the contexts' use cases, never secondary adapters
 # (no dependency on logdock-infra). See docs/architecture.md, 9.
 [dependencies]
+logdock-identity.workspace = true
 logdock-kernel.workspace = true
+logdock-projects.workspace = true
 logdock-retention.workspace = true
 axum.workspace = true
+axum-extra.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -23,6 +26,8 @@ utoipa.workspace = true
 utoipa-axum.workspace = true
 
 [dev-dependencies]
+logdock-identity = { workspace = true, features = ["testing"] }
+logdock-projects = { workspace = true, features = ["testing"] }
 async-trait.workspace = true
 http-body-util.workspace = true
 tempfile.workspace = true

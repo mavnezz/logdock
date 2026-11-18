@@ -45,8 +45,10 @@ export function mountWith<T extends Component>(
   setLocale('en')
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const routes = options.routes ?? [{ path: '/:any(.*)*', component: { template: '<div />' } }]
-  const router = createRouter({ history: createMemoryHistory(), routes })
-  void router.push(options.path ?? '/')
+  // The router starts where the test says, before the app's first navigation.
+  const history = createMemoryHistory()
+  history.replace(options.path ?? '/')
+  const router = createRouter({ history, routes })
   const wrapper = mount(component, {
     ...options,
     global: {

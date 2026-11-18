@@ -96,6 +96,45 @@ impl From<logdock_kernel::PortError> for ApiError {
     }
 }
 
+impl From<logdock_identity::application::IdentityError> for ApiError {
+    fn from(error: logdock_identity::application::IdentityError) -> Self {
+        use logdock_identity::application::IdentityError as E;
+        let rejected = |status, code| Self::Rejected { status, code, detail: None };
+        match error {
+            E::InvalidAccount(e) => Self::InvalidInput(e.to_string()),
+            E::PasswordRejected(e) => Self::InvalidInput(e.to_string()),
+            E::InvalidCredentials => rejected(StatusCode::UNAUTHORIZED, "invalid_credentials"),
+            E::WrongPassword => rejected(StatusCode::FORBIDDEN, "wrong_password"),
+            E::TooManyAttempts { retry_after } => {
+                Self::TooManyRequests { code: "too_many_attempts", retry_after }
+            }
+            E::SetupCompleted => rejected(StatusCode::CONFLICT, "setup_completed"),
+            E::InvalidSetupCode => rejected(StatusCode::FORBIDDEN, "invalid_setup_code"),
+            E::Unauthenticated => Self::Unauthenticated,
+            E::Forbidden => Self::Forbidden,
+            E::AccountNotFound => Self::NotFound,
+            E::EmailTaken => Self::conflict("email_taken"),
+            E::LastAdmin => Self::conflict("last_admin"),
+            E::OwnAccount => Self::conflict("own_account"),
+            E::Port(e) => Self::internal(e),
+        }
+    }
+}
+
+impl From<logdock_projects::application::ProjectError> for ApiError {
+    fn from(error: logdock_projects::application::ProjectError) -> Self {
+        use logdock_projects::application::ProjectError as E;
+        match error {
+            E::Invalid(e) => Self::InvalidInput(e.to_string()),
+            E::NameTaken => Self::conflict("name_taken"),
+            E::NotFound | E::EnvironmentNotFound | E::KeyNotFound => Self::NotFound,
+            E::EnvironmentTaken => Self::conflict("environment_taken"),
+            E::EnvironmentInUse => Self::conflict("environment_in_use"),
+            E::Port(e) => Self::internal(e),
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         if let Self::Internal(error) = &self {

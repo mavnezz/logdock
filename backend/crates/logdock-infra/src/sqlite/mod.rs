@@ -2,6 +2,15 @@
 //! contexts. Opening it also brings its schema up to date; a database
 //! written by a newer release is refused instead of being guessed at.
 
+mod accounts;
+mod audit;
+mod ingest_counts;
+mod keys;
+mod projects;
+#[cfg(test)]
+pub(crate) mod repository_tests;
+mod sessions;
+
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -9,6 +18,13 @@ use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteSynchronous,
 };
+
+pub use accounts::SqliteAccounts;
+pub use audit::SqliteAudit;
+pub use ingest_counts::SqliteIngestCounter;
+pub use keys::{RandomKeys, SqliteKeys};
+pub use projects::SqliteProjects;
+pub use sessions::SqliteSessions;
 
 static MIGRATOR: Migrator = sqlx::migrate!();
 

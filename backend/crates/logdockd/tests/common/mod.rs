@@ -12,6 +12,9 @@ use logdockd::config::Config;
 use serde_json::Value;
 use tower::ServiceExt;
 
+pub const SETUP_CODE: &str = "TEST-CODE";
+pub const PASSWORD: &str = "correct horse battery";
+
 pub struct TestApp {
     pub router: Router,
     pub app: Option<App>,
@@ -41,6 +44,7 @@ pub fn config(dir: &std::path::Path, extra: &[(&str, &str)]) -> Config {
         ("LOGDOCK_WEB_DIR".into(), String::new()),
         ("LOGDOCK_MIN_FREE_DISK".into(), "1".into()),
         ("LOGDOCK_PUBLIC_URL".into(), "http://logdock.test".into()),
+        ("LOGDOCK_SETUP_CODE".into(), SETUP_CODE.into()),
     ];
     vars.extend(extra.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())));
     Config::from_lookup(|name| vars.iter().rev().find(|(k, _)| k == name).map(|(_, v)| v.clone())).unwrap()
@@ -83,5 +87,98 @@ impl TestApp {
         if let Some(app) = self.app.take() {
             app.shutdown(std::time::Duration::from_secs(5)).await;
         }
+    }
+}
+
+/// A browser with a session: keeps the cookie and sends the CSRF token and
+/// the origin with every change.
+pub struct Browser<'a> {
+    pub app: &'a TestApp,
+    pub cookie: Option<String>,
+    pub csrf: Option<String>,
+}
+
+impl<'a> Browser<'a> {
+    pub fn new(app: &'a TestApp) -> Self {
+        Self { app, cookie: None, csrf: None }
+    }
+
+    /// Runs the first setup as `email` and keeps the session.
+    pub async fn setup(app: &'a TestApp, email: &str) -> Self {
+        let mut browser = Self::new(app);
+        let answer = browser
+            .send(
+                Method::POST,
+                "/api/v1/setup",
+                Some(serde_json::json!({
+                    "code": SETUP_CODE, "email": email, "name": "Admin", "password": PASSWORD
+                })),
+            )
+            .await;
+        assert_eq!(answer.status, StatusCode::OK, "{}", answer.text());
+        browser.keep(&answer);
+        browser
+    }
+
+    pub async fn login(app: &'a TestApp, email: &str, password: &str) -> Self {
+        let mut browser = Self::new(app);
+        let answer = browser
+            .send(
+                Method::POST,
+                "/api/v1/auth/login",
+                Some(serde_json::json!({"email": email, "password": password})),
+            )
+            .await;
+        assert_eq!(answer.status, StatusCode::OK, "{}", answer.text());
+        browser.keep(&answer);
+        browser
+    }
+
+    pub fn keep(&mut self, answer: &Answer) {
+        if let Some(cookie) = answer.headers.get(header::SET_COOKIE) {
+            let cookie = cookie.to_str().unwrap();
+            self.cookie = Some(cookie.split(';').next().unwrap().to_owned());
+        }
+        if let Some(token) = answer.json()["csrf_token"].as_str() {
+            self.csrf = Some(token.to_owned());
+        }
+    }
+
+    pub async fn send(&self, method: Method, path: &str, body: Option<Value>) -> Answer {
+        let mut request =
+            Request::builder().method(method.clone()).uri(path).header(header::HOST, "logdock.test");
+        if method != Method::GET {
+            request = request.header(header::ORIGIN, "http://logdock.test");
+        }
+        if let Some(cookie) = &self.cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        if let Some(csrf) = &self.csrf {
+            request = request.header("x-csrf-token", csrf);
+        }
+        let request = match body {
+            Some(body) => request
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+            None => request.body(Body::empty()).unwrap(),
+        };
+        self.app.request(request).await
+    }
+
+    pub async fn get(&self, path: &str) -> Answer {
+        self.send(Method::GET, path, None).await
+    }
+
+    pub async fn post(&self, path: &str, body: Value) -> Answer {
+        self.send(Method::POST, path, Some(body)).await
+    }
+
+    pub async fn patch(&self, path: &str, body: Value) -> Answer {
+        self.send(Method::PATCH, path, Some(body)).await
+    }
+
+    pub async fn delete(&self, path: &str) -> Answer {
+        self.send(Method::DELETE, path, None).await
     }
 }

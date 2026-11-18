@@ -6,7 +6,8 @@ import { createApp } from 'vue'
 
 import App from '@/app/App.vue'
 import { createAppRouter } from '@/app/router'
-import { ApiProblem } from '@/shared/api/client'
+import { useSessionStore } from '@/shared/session/store'
+import { ApiProblem, configureApi } from '@/shared/api/client'
 import { i18n } from '@/shared/i18n'
 import { applyTheme, followSystemTheme } from '@/shared/lib/theme'
 
@@ -23,6 +24,17 @@ const queryClient = new QueryClient({
   },
 })
 
-const app = createApp(App)
-app.use(createPinia()).use(i18n).use(VueQueryPlugin, { queryClient }).use(createAppRouter())
-app.mount('#app')
+const pinia = createPinia()
+const router = createAppRouter(pinia)
+const session = useSessionStore(pinia)
+
+configureApi({
+  csrfToken: () => session.session?.csrf_token,
+  onUnauthenticated: () => {
+    session.clear()
+    queryClient.clear()
+    void router.push({ name: 'login' })
+  },
+})
+
+createApp(App).use(pinia).use(i18n).use(VueQueryPlugin, { queryClient }).use(router).mount('#app')

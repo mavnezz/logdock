@@ -1,0 +1,143 @@
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+use logdock_kernel::{Actor, ProjectId, RequestContext};
+
+use crate::application::{ProjectChanges, ProjectError};
+use crate::domain::{NotifyAddress, ProjectSettings, Rejection, Tally};
+use crate::testing::TestProjects;
+
+fn actor() -> Actor {
+    Actor { account_id: 1, name: "ada@example.com".into() }
+}
+
+fn request() -> RequestContext {
+    RequestContext::default()
+}
+
+#[tokio::test]
+async fn creates_projects_with_their_stages() {
+    let t = TestProjects::new();
+    let envs = ["Production".to_owned(), "staging".to_owned(), "production".to_owned()];
+    let project = t.use_cases.create.execute(&actor(), "orders-backend", &envs, &request()).await.unwrap();
+    let names: Vec<&str> = project.environments.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["production", "staging"]);
+
+    let again = t.use_cases.create.execute(&actor(), "orders-backend", &[], &request()).await;
+    assert!(matches!(again, Err(ProjectError::NameTaken)));
+    let bad = t.use_cases.create.execute(&actor(), "x", &["not ok".into()], &request()).await;
+    assert!(matches!(bad, Err(ProjectError::Invalid(_))));
+
+    let env =
+        t.use_cases.add_environment.execute(&actor(), project.id, "development", &request()).await.unwrap();
+    let taken = t.use_cases.add_environment.execute(&actor(), project.id, "staging", &request()).await;
+    assert!(matches!(taken, Err(ProjectError::EnvironmentTaken)));
+    t.use_cases.remove_environment.execute(&actor(), project.id, env.id, &request()).await.unwrap();
+    assert_eq!(t.use_cases.get.execute(project.id).await.unwrap().environments.len(), 2);
+    assert_eq!(t.use_cases.list.execute().await.unwrap().len(), 1);
+    let audit: Vec<String> = t.audit.0.lock().unwrap().iter().map(|e| e.action.clone()).collect();
+    assert_eq!(audit, ["project.create", "environment.add", "environment.remove"]);
+}
+
+#[tokio::test]
+async fn keys_let_in_their_stage_until_revoked() {
+    let t = TestProjects::new();
+    let project =
+        t.use_cases.create.execute(&actor(), "orders", &["production".into()], &request()).await.unwrap();
+    let production = project.environments[0].id;
+    let created =
+        t.use_cases.create_key.execute(&actor(), project.id, production, " web ", &request()).await.unwrap();
+    assert_eq!(created.key.prefix.len(), 8);
+    assert!(created.secret.expose().starts_with(&created.key.prefix));
+    assert_eq!(created.key.label.as_ref().map(|l| l.as_str()), Some("web"));
+
+    let auth = &t.use_cases.authenticate_key;
+    let scope = auth.execute(Some(project.id), created.secret.expose()).await.unwrap().unwrap();
+    assert_eq!(scope.scope.environment, production);
+    assert_eq!(scope.environment_name.as_str(), "production");
+    assert!(auth.execute(None, created.secret.expose()).await.unwrap().is_some(), "NDJSON names no project");
+    assert!(auth.execute(Some(ProjectId::new(999)), created.secret.expose()).await.unwrap().is_none());
+    assert!(auth.execute(Some(project.id), "unknown").await.unwrap().is_none());
+    assert!(auth.execute(Some(project.id), "").await.unwrap().is_none());
+
+    // Cached: the last use is written once a minute at most.
+    let touches = t.keys.touches.load(Ordering::SeqCst);
+    auth.execute(Some(project.id), created.secret.expose()).await.unwrap();
+    assert_eq!(t.keys.touches.load(Ordering::SeqCst), touches);
+    t.clock.advance(Duration::from_secs(61));
+    auth.execute(Some(project.id), created.secret.expose()).await.unwrap();
+    assert_eq!(t.keys.touches.load(Ordering::SeqCst), touches + 1);
+
+    let in_use = t.use_cases.remove_environment.execute(&actor(), project.id, production, &request()).await;
+    assert!(matches!(in_use, Err(ProjectError::EnvironmentInUse)));
+    t.use_cases.revoke_key.execute(&actor(), project.id, created.key.id, &request()).await.unwrap();
+    assert!(
+        auth.execute(Some(project.id), created.secret.expose()).await.unwrap().is_none(),
+        "revoked at once"
+    );
+    let keys = t.use_cases.list_keys.execute(project.id).await.unwrap();
+    assert!(keys[0].revoked_at.is_some());
+    t.use_cases.remove_environment.execute(&actor(), project.id, production, &request()).await.unwrap();
+}
+
+#[tokio::test]
+async fn keys_need_a_stage_of_their_project() {
+    let t = TestProjects::new();
+    let a = t.use_cases.create.execute(&actor(), "a", &["production".into()], &request()).await.unwrap();
+    let b = t.use_cases.create.execute(&actor(), "b", &["production".into()], &request()).await.unwrap();
+    let foreign = t.use_cases.create_key.execute(&actor(), a.id, b.environments[0].id, "", &request()).await;
+    assert!(matches!(foreign, Err(ProjectError::EnvironmentNotFound)));
+    let missing = t
+        .use_cases
+        .create_key
+        .execute(&actor(), ProjectId::new(77), a.environments[0].id, "", &request())
+        .await;
+    assert!(matches!(missing, Err(ProjectError::NotFound)));
+}
+
+#[tokio::test]
+async fn renames_changes_settings_and_deletes() {
+    let t = TestProjects::new();
+    let project =
+        t.use_cases.create.execute(&actor(), "orders", &["production".into()], &request()).await.unwrap();
+    t.use_cases.create.execute(&actor(), "billing", &[], &request()).await.unwrap();
+    let key = t
+        .use_cases
+        .create_key
+        .execute(&actor(), project.id, project.environments[0].id, "", &request())
+        .await
+        .unwrap();
+
+    let taken = ProjectChanges { name: Some("billing".into()), ..Default::default() };
+    let result = t.use_cases.update.execute(&actor(), project.id, taken, &request()).await;
+    assert!(matches!(result, Err(ProjectError::NameTaken)));
+
+    let mut settings = ProjectSettings::default();
+    settings.notify.push(NotifyAddress::parse("ops@example.com").unwrap());
+    settings.redaction.extra_keys.push("customer_pin".into());
+    let changes = ProjectChanges { name: Some("orders-api".into()), settings: Some(settings.clone()) };
+    let changed = t.use_cases.update.execute(&actor(), project.id, changes, &request()).await.unwrap();
+    assert_eq!(changed.name.as_str(), "orders-api");
+    let scope = t.use_cases.authenticate_key.execute(None, key.secret.expose()).await.unwrap().unwrap();
+    assert_eq!(scope.settings, settings, "the key's scope carries the new settings at once");
+
+    t.use_cases.delete.execute(&actor(), project.id, &request()).await.unwrap();
+    assert!(matches!(t.use_cases.get.execute(project.id).await, Err(ProjectError::NotFound)));
+    assert!(t.use_cases.authenticate_key.execute(None, key.secret.expose()).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn counts_what_ingest_did() {
+    let t = TestProjects::new();
+    let project = t.use_cases.create.execute(&actor(), "orders", &[], &request()).await.unwrap();
+    t.use_cases.record_ingest.execute(project.id, None, &Tally::accepted(5)).await;
+    t.use_cases.record_ingest.execute(project.id, None, &Tally::default()).await;
+    t.use_cases.record_ingest.refused(project.id, Rejection::Auth, "unknown key").await;
+    assert_eq!(t.counter.0.lock().unwrap().len(), 2, "empty tallies are not recorded");
+    let counts = t.use_cases.ingest_counts.execute(project.id, 7).await.unwrap();
+    assert_eq!(counts[0].accepted, 5);
+    assert!(matches!(
+        t.use_cases.ingest_counts.execute(ProjectId::new(9), 7).await,
+        Err(ProjectError::NotFound)
+    ));
+}

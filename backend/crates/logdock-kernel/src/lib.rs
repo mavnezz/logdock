@@ -6,6 +6,7 @@
 mod audit;
 mod error;
 mod ids;
+pub mod redaction;
 mod request;
 mod secret;
 mod time;

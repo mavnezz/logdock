@@ -14,9 +14,9 @@
 set -euo pipefail
 
 report=${1:?usage: $0 REPORT.json}
-total_min=85
-crate_min=75
-domain_min=90
+total_min=92
+crate_min=85
+domain_min=97
 glue=(logdockd)
 
 summary=$(jq -r '

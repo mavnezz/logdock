@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use logdock_api::Cidr;
+use logdock_identity::domain::SessionPolicy;
 use logdock_retention::domain::RetentionPolicy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +25,9 @@ pub struct Config {
     pub trusted_proxies: Vec<Cidr>,
     pub retention: RetentionPolicy,
     pub shutdown_timeout: Duration,
+    pub sessions: SessionPolicy,
+    /// A fixed setup code instead of a random one, for automated setups.
+    pub setup_code: Option<String>,
     pub log_filter: String,
     pub log_format: LogFormat,
 }
@@ -89,6 +93,15 @@ impl Config {
                 Duration::from_secs(20),
                 parse_duration,
             )?,
+            sessions: SessionPolicy {
+                idle: env.parse("LOGDOCK_SESSION_IDLE", SessionPolicy::default().idle, parse_duration)?,
+                lifetime: env.parse(
+                    "LOGDOCK_SESSION_LIFETIME",
+                    SessionPolicy::default().lifetime,
+                    parse_duration,
+                )?,
+            },
+            setup_code: env.text("LOGDOCK_SETUP_CODE").filter(|code| !code.is_empty()),
             log_filter: env.text("LOGDOCK_LOG_LEVEL").unwrap_or_else(|| "info".to_owned()),
             log_format: env.parse("LOGDOCK_LOG_FORMAT", LogFormat::Json, |text| match text {
                 "json" => Ok(LogFormat::Json),

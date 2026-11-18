@@ -1,0 +1,28 @@
+[package]
+name = "logdock-identity"
+description = "Bounded context Identity: accounts, roles, sign-in, sessions, the first setup, audit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Core crate of a bounded context: no I/O, no frameworks. Adapters live in
+# logdock-infra and logdock-api. See docs/architecture.md, 9.
+[dependencies]
+logdock-kernel.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+# The async mutex that serializes changes to accounts.
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+# In-memory implementations of all ports, for tests of this crate.
+testing = []
+
+[lints]
+workspace = true

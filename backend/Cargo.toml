@@ -13,16 +13,22 @@ publish = false
 # Internal crates. Which crate may depend on which is documented in
 # docs/architecture.md, section 9, and checked by logdock-architecture.
 logdock-api = { path = "crates/logdock-api" }
+logdock-identity = { path = "crates/logdock-identity" }
 logdock-infra = { path = "crates/logdock-infra" }
 logdock-kernel = { path = "crates/logdock-kernel" }
+logdock-projects = { path = "crates/logdock-projects" }
 logdock-retention = { path = "crates/logdock-retention" }
 
 anyhow = "1"
+argon2 = "0.6"
 async-trait = "0.1"
 axum = "0.8"
+axum-extra = { version = "0.12", features = ["cookie"] }
+getrandom = "0.4"
 http-body-util = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11"
 # SQLite is bundled, so every build runs against the same, known version
 # (libsqlite3-sys compiles it with FTS5).
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite-bundled", "migrate", "macros"] }

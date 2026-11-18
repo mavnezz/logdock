@@ -38,7 +38,9 @@ fn app(free: u64, web_dir: Option<std::path::PathBuf>) -> Router {
     let policy = RetentionPolicy { min_free_bytes: 10, ..RetentionPolicy::default() };
     let retention = RetentionUseCases::new(RetentionPorts { probe: Arc::new(Probe { free }) }, policy);
     let config = ApiConfig { web_dir, ..ApiConfig::default() };
-    router(ApiState::new(UseCases { retention }, config))
+    let identity = logdock_identity::testing::TestIdentity::new().use_cases;
+    let projects = logdock_projects::testing::TestProjects::new().use_cases;
+    router(ApiState::new(UseCases { identity, projects, retention }, config))
 }
 
 async fn get(app: &Router, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
