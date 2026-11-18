@@ -1,0 +1,28 @@
+[package]
+name = "logdock-logs"
+description = "Bounded context Logs: log entries, their limits and redaction, search, live view and counts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Core crate of a bounded context: no I/O, no frameworks. Adapters live in
+# logdock-infra and logdock-api. See docs/architecture.md, 9.
+[dependencies]
+logdock-kernel.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+# The broadcast channel of the live view.
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+# In-memory implementations of all ports, for tests.
+testing = []
+
+[lints]
+workspace = true

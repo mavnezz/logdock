@@ -2,10 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use logdock_identity::application::IdentityUseCases;
+use logdock_logs::application::LogUseCases;
 use logdock_projects::application::ProjectUseCases;
 use logdock_retention::application::RetentionUseCases;
 
 use crate::extract::Cidr;
+use crate::ingest::{IngestConfig, IngestGuard};
 
 /// How the API is exposed.
 #[derive(Debug, Clone, Default)]
@@ -19,6 +21,7 @@ pub struct ApiConfig {
     pub web_dir: Option<PathBuf>,
     /// The address the interface is reached at, for the DSNs it shows.
     pub public_url: Option<String>,
+    pub ingest: IngestConfig,
 }
 
 impl ApiConfig {
@@ -33,6 +36,7 @@ impl ApiConfig {
 /// The use cases of all contexts.
 pub struct UseCases {
     pub identity: IdentityUseCases,
+    pub logs: LogUseCases,
     pub projects: ProjectUseCases,
     pub retention: RetentionUseCases,
 }
@@ -42,18 +46,24 @@ pub struct UseCases {
 #[derive(Clone)]
 pub struct ApiState {
     pub(crate) identity: IdentityUseCases,
+    pub(crate) logs: LogUseCases,
     pub(crate) projects: ProjectUseCases,
     pub(crate) retention: RetentionUseCases,
     pub(crate) config: Arc<ApiConfig>,
+    pub(crate) ingest: IngestConfig,
+    pub(crate) ingest_guard: Arc<IngestGuard>,
 }
 
 impl ApiState {
     pub fn new(use_cases: UseCases, config: ApiConfig) -> Self {
         Self {
             identity: use_cases.identity,
+            logs: use_cases.logs,
             projects: use_cases.projects,
             retention: use_cases.retention,
+            ingest: config.ingest,
             config: Arc::new(config),
+            ingest_guard: Arc::new(IngestGuard::default()),
         }
     }
 }

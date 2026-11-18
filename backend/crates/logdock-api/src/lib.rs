@@ -10,6 +10,7 @@ mod auth;
 mod dto;
 mod error;
 mod extract;
+mod ingest;
 mod routes;
 mod state;
 
@@ -30,6 +31,7 @@ use utoipa_axum::router::OpenApiRouter;
 pub use auth::CSRF_HEADER;
 pub use error::{ApiError, Problem};
 pub use extract::Cidr;
+pub use ingest::IngestConfig;
 pub use state::{ApiConfig, ApiState, UseCases};
 
 /// Prefix of the current API version.
@@ -43,6 +45,7 @@ pub const API_V1: &str = "/api/v1";
         (name = "auth", description = "The first setup, sign-in, the session and the caller's own account"),
         (name = "accounts", description = "Accounts and the audit log, for administrators"),
         (name = "projects", description = "Projects, their stages, ingest keys, settings and ingest counts"),
+        (name = "logs", description = "Log entries: search, one entry, counts over time, sources"),
     ),
     modifiers(&SessionSecurity)
 )]
@@ -89,6 +92,8 @@ pub fn router(state: ApiState) -> Router {
             &format!("{API_V1}/openapi.json"),
             get(move || async move { ([(header::CONTENT_TYPE, "application/json")], openapi_json) }),
         )
+        .merge(ingest::router(&state))
+        .merge(routes::logs::stream_router())
         .fallback(web)
         .with_state(state)
         .layer(SetResponseHeaderLayer::if_not_present(

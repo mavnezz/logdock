@@ -8,7 +8,8 @@ const DAY_SECONDS: i64 = 86_400;
 ///
 /// Microseconds, because log lines written within one millisecond must keep
 /// their order; maps directly onto an SQLite `INTEGER` and a JSON number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// The default is the epoch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Timestamp(i64);
 
 impl Timestamp {
@@ -76,6 +77,61 @@ impl Timestamp {
             second: (second_of_day % 60) as u8,
             micros: self.0.rem_euclid(MICROS) as u32,
         }
+    }
+
+    /// Reads RFC 3339 as clients write it: `2026-11-18T09:15:02Z`,
+    /// `2026-11-18T09:15:02.123456+01:00`, or with a space instead of `T`.
+    pub fn parse_rfc3339(text: &str) -> Option<Self> {
+        let text = text.trim();
+        let bytes = text.as_bytes();
+        if bytes.len() < 19 || !matches!(bytes[10], b'T' | b't' | b' ') {
+            return None;
+        }
+        let number = |range: std::ops::Range<usize>| text.get(range)?.parse::<u32>().ok();
+        let (year, month, day) = (number(0..4)?, number(5..7)?, number(8..10)?);
+        let (hour, minute, second) = (number(11..13)?, number(14..16)?, number(17..19)?);
+        if bytes[4] != b'-' || bytes[7] != b'-' || bytes[13] != b':' || bytes[16] != b':' {
+            return None;
+        }
+        let mut rest = &text[19..];
+        let mut micros = 0u32;
+        if let Some(fraction) = rest.strip_prefix('.') {
+            let digits = fraction.chars().take_while(char::is_ascii_digit).count();
+            if digits == 0 {
+                return None;
+            }
+            let padded: String = fraction[..digits].chars().chain("000000".chars()).take(6).collect();
+            micros = padded.parse().ok()?;
+            rest = &fraction[digits..];
+        }
+        let offset_seconds: i64 = match rest {
+            "" | "Z" | "z" => 0,
+            offset => {
+                let sign = match offset.as_bytes().first()? {
+                    b'+' => 1,
+                    b'-' => -1,
+                    _ => return None,
+                };
+                let digits: String = offset[1..].chars().filter(|c| *c != ':').collect();
+                if digits.len() != 4 {
+                    return None;
+                }
+                let hours: i64 = digits[..2].parse().ok()?;
+                let minutes: i64 = digits[2..].parse().ok()?;
+                sign * (hours * 3600 + minutes * 60)
+            }
+        };
+        let utc = UtcTime {
+            year: i64::from(year),
+            month: u8::try_from(month).ok()?,
+            day: u8::try_from(day).ok()?,
+            hour: u8::try_from(hour).ok()?,
+            minute: u8::try_from(minute).ok()?,
+            second: u8::try_from(second.min(59)).ok()?,
+            micros,
+        };
+        let local = Self::from_utc(utc)?;
+        Some(Self(local.0.checked_sub(offset_seconds.checked_mul(MICROS)?)?))
     }
 
     /// From a UTC calendar date and time; `None` for one that does not exist.
@@ -241,6 +297,30 @@ mod tests {
         assert_eq!(Timestamp::from_utc(utc), Some(time));
         assert_eq!(time.day().to_string(), "2026-11-18");
         assert_eq!(Timestamp::from_unix_seconds(-1).utc().to_string(), "1969-12-31T23:59:59.000000Z");
+    }
+
+    #[test]
+    fn reads_rfc3339() {
+        let expected = Timestamp::from_unix_micros(1_794_993_302_123_456);
+        assert_eq!(Timestamp::parse_rfc3339("2026-11-18T09:15:02.123456Z"), Some(expected));
+        assert_eq!(Timestamp::parse_rfc3339("2026-11-18T10:15:02.123456+01:00"), Some(expected));
+        assert_eq!(Timestamp::parse_rfc3339("2026-11-18 08:15:02.123456-0100"), Some(expected));
+        assert_eq!(Timestamp::parse_rfc3339("2026-11-18T09:15:02.1234567Z"), Some(expected));
+        assert_eq!(
+            Timestamp::parse_rfc3339("2026-11-18T09:15:02Z"),
+            Some(Timestamp::from_unix_seconds(1_794_993_302))
+        );
+        for bad in [
+            "",
+            "2026-11-18",
+            "2026-11-18T09:15:02.Z",
+            "2026-13-18T09:15:02Z",
+            "2026-11-18T09:15:02+1",
+            "2026/11/18T09:15:02Z",
+            "2026-11-18T09:15:02x",
+        ] {
+            assert_eq!(Timestamp::parse_rfc3339(bad), None, "{bad}");
+        }
     }
 
     #[test]

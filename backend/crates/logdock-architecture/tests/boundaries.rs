@@ -17,7 +17,7 @@ use serde_json::Value;
 use syn::visit::{self, Visit};
 
 /// The bounded contexts.
-const CONTEXTS: &[&str] = &["logdock-identity", "logdock-projects", "logdock-retention"];
+const CONTEXTS: &[&str] = &["logdock-identity", "logdock-logs", "logdock-projects", "logdock-retention"];
 
 /// What the contexts share.
 const SHARED: &[&str] = &["logdock-kernel"];

@@ -14,11 +14,15 @@ use logdock_identity::domain::SetupCode;
 use logdock_infra::SystemClock;
 use logdock_infra::health::{DataDirProbe, WriterHealth};
 use logdock_infra::identity::{Argon2Hasher, RandomTokens, new_setup_code};
+use logdock_infra::logs::{LogWriter, SegmentLogStore, SqliteLogStats, WriterConfig, WriterTask};
+use logdock_infra::segments::Segments;
 use logdock_infra::sqlite::{
     Database, RandomKeys, SqliteAccounts, SqliteAudit, SqliteIngestCounter, SqliteKeys, SqliteProjects,
     SqliteSessions,
 };
 use logdock_kernel::Secret;
+use logdock_logs::application::{LogPorts, LogUseCases};
+use logdock_logs::domain::LogLimits;
 use logdock_projects::application::{ProjectPorts, ProjectUseCases};
 use logdock_retention::application::{RetentionPorts, RetentionUseCases};
 use tokio::net::TcpListener;
@@ -32,6 +36,8 @@ pub struct App {
     pub router: axum::Router,
     db: Database,
     counter: Arc<SqliteIngestCounter>,
+    segments: Arc<Segments>,
+    log_writer: WriterTask,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -94,6 +100,20 @@ impl App {
         });
 
         let writers = WriterHealth::default();
+        let segments = Arc::new(Segments::new(config.data_dir.join("segments"), db.clone()));
+        let writer_config = WriterConfig { queue: config.ingest_queue, ..WriterConfig::default() };
+        let (log_writer, log_writer_task) = LogWriter::start(Arc::clone(&segments), &writers, writer_config);
+        let log_writer = Arc::new(log_writer);
+        let logs = LogUseCases::new(
+            LogPorts {
+                sink: log_writer.clone(),
+                store: Arc::new(SegmentLogStore::new(Arc::clone(&segments))),
+                stats: Arc::new(SqliteLogStats::new(Arc::clone(&segments))),
+                feed: log_writer,
+                clock: clock.clone(),
+            },
+            LogLimits::default(),
+        );
         let probe = DataDirProbe::new(db.clone(), config.data_dir.clone(), writers);
         let retention = RetentionUseCases::new(RetentionPorts { probe: Arc::new(probe) }, config.retention);
 
@@ -109,6 +129,7 @@ impl App {
             trusted_proxies: config.trusted_proxies.clone(),
             web_dir,
             public_url: config.public_url.clone(),
+            ingest: config.ingest,
         };
 
         let (stop, stopped) = watch::channel(false);
@@ -134,9 +155,9 @@ impl App {
             }
         }));
 
-        let use_cases = UseCases { identity, projects, retention };
+        let use_cases = UseCases { identity, logs, projects, retention };
         let router = logdock_api::router(ApiState::new(use_cases, api_config));
-        Ok(Self { router, db, counter, stop, tasks })
+        Ok(Self { router, db, counter, segments, log_writer: log_writer_task, stop, tasks })
     }
 
     /// Finishes what is under way, within `timeout`, and closes the
@@ -147,6 +168,9 @@ impl App {
             for task in self.tasks {
                 let _ = task.await;
             }
+            // What is queued is written before the database closes.
+            self.log_writer.finish().await;
+            self.segments.close_readers().await;
             if let Err(error) = self.counter.flush().await {
                 tracing::warn!(%error, "cannot write the ingest counts");
             }

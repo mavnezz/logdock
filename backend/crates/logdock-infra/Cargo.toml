@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 logdock-identity.workspace = true
 logdock-kernel.workspace = true
+logdock-logs.workspace = true
 logdock-projects.workspace = true
 logdock-retention.workspace = true
 argon2.workspace = true
@@ -17,7 +18,8 @@ async-trait.workspace = true
 getrandom.workspace = true
 rustix.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# Keeps attributes in the order clients wrote them.
+serde_json = { workspace = true, features = ["preserve_order"] }
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true

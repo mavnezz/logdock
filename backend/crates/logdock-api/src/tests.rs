@@ -40,7 +40,8 @@ fn app(free: u64, web_dir: Option<std::path::PathBuf>) -> Router {
     let config = ApiConfig { web_dir, ..ApiConfig::default() };
     let identity = logdock_identity::testing::TestIdentity::new().use_cases;
     let projects = logdock_projects::testing::TestProjects::new().use_cases;
-    router(ApiState::new(UseCases { identity, projects, retention }, config))
+    let logs = logdock_logs::testing::memory().0;
+    router(ApiState::new(UseCases { identity, logs, projects, retention }, config))
 }
 
 async fn get(app: &Router, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {

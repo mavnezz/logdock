@@ -125,6 +125,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A page of entries, newest first. */
+        get: operations["search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/histogram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Entries per level over time. The search text is not applied: the counts
+         *     are kept per minute, project, stage, service and level.
+         */
+        get: operations["histogram"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The services and hosts entries came from, for the filters. */
+        get: operations["sources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One entry. */
+        get: operations["entry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -409,6 +480,27 @@ export interface components {
             /** @description `live`, `ready` or `not_ready`. */
             status: string;
         };
+        Histogram: {
+            /** Format: int64 */
+            bucket_seconds: number;
+            buckets: components["schemas"]["HistogramBucket"][];
+        };
+        HistogramBucket: {
+            /** Format: int64 */
+            debug: number;
+            /** Format: int64 */
+            error: number;
+            /** Format: int64 */
+            fatal: number;
+            /** Format: int64 */
+            info: number;
+            /** @description Start of the bucket, RFC 3339. */
+            start: string;
+            /** Format: int64 */
+            trace: number;
+            /** Format: int64 */
+            warn: number;
+        };
         IngestCount: {
             /** Format: int64 */
             accepted: number;
@@ -449,6 +541,50 @@ export interface components {
             at: string;
             detail: string;
             reason: string;
+        };
+        LogEntry: {
+            /** @description The attributes, flattened (`user.id`), in the order they were sent. */
+            attributes: Record<string, never>;
+            container?: string | null;
+            /** Format: int64 */
+            environment_id: number;
+            host?: string | null;
+            id: string;
+            /** @description `trace`, `debug`, `info`, `warn`, `error` or `fatal`. */
+            level: string;
+            message: string;
+            /** Format: int64 */
+            project_id: number;
+            received: string;
+            /**
+             * Format: int32
+             * @description How many values redaction replaced.
+             */
+            redactions: number;
+            release?: string | null;
+            service?: string | null;
+            span_id?: string | null;
+            template?: string | null;
+            /** @description When it was written, RFC 3339 with microseconds. */
+            time: string;
+            trace_id?: string | null;
+            /** @description Whether limits cut something short. */
+            truncated: boolean;
+            user_id?: string | null;
+        };
+        LogPage: {
+            entries: components["schemas"]["LogEntry"][];
+            /** @description Pass as `before` for the next page; `null` on the last one. */
+            next?: string | null;
+        };
+        LogSource: {
+            /** Format: int64 */
+            environment_id: number;
+            host?: string | null;
+            last_seen: string;
+            /** Format: int64 */
+            project_id: number;
+            service?: string | null;
         };
         LoginRequest: {
             email: string;
@@ -841,6 +977,155 @@ export interface operations {
                 };
             };
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    search: {
+        parameters: {
+            query?: {
+                /** @description Project IDs. */
+                project?: string;
+                /** @description Stage IDs. */
+                environment?: string;
+                /** @description Services, e.g. `web,horizon`. */
+                service?: string;
+                host?: string;
+                /** @description Levels, e.g. `warn,error`. */
+                level?: string;
+                /** @description From this time on, RFC 3339. */
+                from?: string;
+                /** @description Before this time, RFC 3339. */
+                to?: string;
+                /**
+                 * @description Words, `"phrases"`, `prefix*`, `key:value`; also `level:`,
+                 *     `service:`, `host:` and `trace:`.
+                 */
+                q?: string;
+                trace?: string;
+                /** @description Where the previous page ended (its `next`). */
+                before?: string;
+                /** @description Entries per page (default 100, at most 500). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogPage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    histogram: {
+        parameters: {
+            query?: {
+                /** @description Project IDs. */
+                project?: string;
+                /** @description Stage IDs. */
+                environment?: string;
+                /** @description Services, e.g. `web,horizon`. */
+                service?: string;
+                host?: string;
+                /** @description Levels, e.g. `warn,error`. */
+                level?: string;
+                /** @description From this time on, RFC 3339. */
+                from?: string;
+                /** @description Before this time, RFC 3339. */
+                to?: string;
+                /**
+                 * @description Words, `"phrases"`, `prefix*`, `key:value`; also `level:`,
+                 *     `service:`, `host:` and `trace:`.
+                 */
+                q?: string;
+                trace?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Histogram"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    sources: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated; all when left out. */
+                project?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogSource"][];
+                };
+            };
+        };
+    };
+    entry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogEntry"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -5,7 +5,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use logdock_api::Cidr;
+use logdock_api::{Cidr, IngestConfig};
 use logdock_identity::domain::SessionPolicy;
 use logdock_retention::domain::RetentionPolicy;
 
@@ -24,6 +24,9 @@ pub struct Config {
     pub secure_cookies: bool,
     pub trusted_proxies: Vec<Cidr>,
     pub retention: RetentionPolicy,
+    pub ingest: IngestConfig,
+    /// Log entries waiting for the writer at most.
+    pub ingest_queue: usize,
     pub shutdown_timeout: Duration,
     pub sessions: SessionPolicy,
     /// A fixed setup code instead of a random one, for automated setups.
@@ -62,6 +65,7 @@ impl Config {
         }
         let https = public_url.as_deref().is_none_or(|url| url.starts_with("https://"));
         let defaults = RetentionPolicy::default();
+        let ingest = IngestConfig::default();
         let retention = RetentionPolicy {
             logs_days: env.parse("LOGDOCK_RETENTION_LOGS_DAYS", defaults.logs_days, parse_days)?,
             events_days: env.parse("LOGDOCK_RETENTION_EVENTS_DAYS", defaults.events_days, parse_days)?,
@@ -88,6 +92,22 @@ impl Config {
                 text.split(',').map(str::trim).filter(|net| !net.is_empty()).map(str::parse).collect()
             })?,
             retention,
+            ingest: IngestConfig {
+                max_body: env.parse("LOGDOCK_INGEST_MAX_BODY", ingest.max_body as u64, parse_size)? as usize,
+                max_decompressed: env.parse(
+                    "LOGDOCK_INGEST_MAX_DECOMPRESSED",
+                    ingest.max_decompressed as u64,
+                    parse_size,
+                )? as usize,
+                rate: env.parse("LOGDOCK_INGEST_RATE", ingest.rate, parse_rate)?,
+                burst: env.parse("LOGDOCK_INGEST_BURST", ingest.burst, parse_rate)?,
+            },
+            ingest_queue: env.parse("LOGDOCK_INGEST_QUEUE", 100_000, |text| {
+                text.parse::<usize>()
+                    .ok()
+                    .filter(|n| *n > 0)
+                    .ok_or_else(|| "must be a positive number".to_owned())
+            })?,
             shutdown_timeout: env.parse(
                 "LOGDOCK_SHUTDOWN_TIMEOUT",
                 Duration::from_secs(20),
@@ -142,6 +162,13 @@ fn parse_days(text: &str) -> Result<u32, String> {
     match text.parse::<u32>() {
         Ok(days) if (1..=3650).contains(&days) => Ok(days),
         _ => Err("must be a number of days from 1 to 3650".to_owned()),
+    }
+}
+
+fn parse_rate(text: &str) -> Result<f64, String> {
+    match text.parse::<f64>() {
+        Ok(rate) if rate > 0.0 && rate.is_finite() => Ok(rate),
+        _ => Err("must be a positive number".to_owned()),
     }
 }
 
@@ -251,6 +278,8 @@ mod tests {
             ("LOGDOCK_SECURE_COOKIES", "perhaps"),
             ("LOGDOCK_PUBLIC_URL", "logs.example.com"),
             ("LOGDOCK_LOG_FORMAT", "xml"),
+            ("LOGDOCK_INGEST_RATE", "-1"),
+            ("LOGDOCK_INGEST_QUEUE", "0"),
             ("LOGDOCK_SHUTDOWN_TIMEOUT", "5 weeks"),
         ] {
             let error = config(&[(variable, value)]).unwrap_err();

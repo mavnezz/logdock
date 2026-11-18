@@ -182,3 +182,35 @@ impl<'a> Browser<'a> {
         self.send(Method::DELETE, path, None).await
     }
 }
+
+/// A project with the stages `production` and `staging`, and a key for
+/// `production`: (project id, production's id, the key).
+pub async fn project_with_key(admin: &Browser<'_>, name: &str) -> (i64, i64, String) {
+    let project = admin
+        .post(
+            "/api/v1/projects",
+            serde_json::json!({"name": name, "environments": ["production", "staging"]}),
+        )
+        .await
+        .json();
+    let id = project["id"].as_i64().unwrap();
+    let production = project["environments"][0]["id"].as_i64().unwrap();
+    let key = admin
+        .post(&format!("/api/v1/projects/{id}/keys"), serde_json::json!({"environment_id": production}))
+        .await
+        .json();
+    (id, production, key["secret"].as_str().unwrap().to_owned())
+}
+
+/// Asks `path` until `done` holds for its answer, for what is written in
+/// the background.
+pub async fn eventually(browser: &Browser<'_>, path: &str, done: impl Fn(&Value) -> bool) -> Value {
+    for _ in 0..100 {
+        let answer = browser.get(path).await;
+        if answer.status == StatusCode::OK && done(&answer.json()) {
+            return answer.json();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("{path} never got there: {}", browser.get(path).await.text());
+}

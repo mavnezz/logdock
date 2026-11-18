@@ -16,8 +16,10 @@ logdock-api = { path = "crates/logdock-api" }
 logdock-identity = { path = "crates/logdock-identity" }
 logdock-infra = { path = "crates/logdock-infra" }
 logdock-kernel = { path = "crates/logdock-kernel" }
+logdock-logs = { path = "crates/logdock-logs" }
 logdock-projects = { path = "crates/logdock-projects" }
 logdock-retention = { path = "crates/logdock-retention" }
+logdock-sentry = { path = "crates/logdock-sentry" }
 
 anyhow = "1"
 argon2 = "0.6"
@@ -38,7 +40,8 @@ tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "time", "io-util", "sync"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.7", features = ["trace", "request-id", "util", "fs", "set-header"] }
+tower-http = { version = "0.7", features = ["trace", "request-id", "util", "fs", "set-header", "limit", "decompression-gzip", "decompression-deflate", "decompression-br", "decompression-zstd"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 utoipa = "6"

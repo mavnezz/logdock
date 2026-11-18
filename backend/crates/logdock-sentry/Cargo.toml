@@ -1,0 +1,19 @@
+[package]
+name = "logdock-sentry"
+description = "The wire format of the Sentry ingest protocol: envelopes, authentication and the payloads Logdock reads"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# The protocol only: no other crate of ours, no I/O. The API translates
+# between this and the contexts (docs/architecture.md, 9).
+[dependencies]
+serde.workspace = true
+# Keeps attributes in the order the SDK wrote them.
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+
+[lints]
+workspace = true

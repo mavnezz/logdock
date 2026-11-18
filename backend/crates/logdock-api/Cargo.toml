@@ -12,13 +12,16 @@ publish.workspace = true
 [dependencies]
 logdock-identity.workspace = true
 logdock-kernel.workspace = true
+logdock-logs.workspace = true
 logdock-projects.workspace = true
 logdock-retention.workspace = true
+logdock-sentry.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
 tokio.workspace = true
+tokio-stream.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
@@ -27,6 +30,7 @@ utoipa-axum.workspace = true
 
 [dev-dependencies]
 logdock-identity = { workspace = true, features = ["testing"] }
+logdock-logs = { workspace = true, features = ["testing"] }
 logdock-projects = { workspace = true, features = ["testing"] }
 async-trait.workspace = true
 http-body-util.workspace = true
