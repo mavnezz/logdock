@@ -1496,6 +1496,56 @@
         }
       }
     },
+    "/api/v1/system/info": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "The version that runs, and where it is reached.",
+        "operationId": "info",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/system/storage": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "How much each kind of data takes, and the limits.",
+        "operationId": "storage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Storage"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "tags": [
@@ -1949,6 +1999,43 @@
           }
         }
       },
+      "KindUsage": {
+        "type": "object",
+        "required": [
+          "kind",
+          "bytes",
+          "segments",
+          "retention_days"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "kind": {
+            "type": "string",
+            "description": "`logs`, `events` or `traces`."
+          },
+          "oldest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The oldest day kept, `YYYY-MM-DD`."
+          },
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "segments": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "LastRejection": {
         "type": "object",
         "required": [
@@ -2376,6 +2463,78 @@
           "needed": {
             "type": "boolean",
             "description": "No account exists yet: the first administrator is to be created with\nthe setup code from Logdock's log."
+          }
+        }
+      },
+      "Storage": {
+        "type": "object",
+        "required": [
+          "kinds",
+          "segment_bytes",
+          "max_storage_bytes",
+          "database_bytes",
+          "min_free_bytes",
+          "rollups_days"
+        ],
+        "properties": {
+          "database_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "free_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindUsage"
+            }
+          },
+          "max_storage_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Above this, the oldest days are deleted; 0 for no limit.",
+            "minimum": 0
+          },
+          "min_free_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Below this much free space ingest is refused.",
+            "minimum": 0
+          },
+          "rollups_days": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "segment_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "SystemInfo": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "public_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The address SDKs and forwarders send to."
+          },
+          "version": {
+            "type": "string"
           }
         }
       },

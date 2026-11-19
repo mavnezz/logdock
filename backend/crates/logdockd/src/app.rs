@@ -15,7 +15,7 @@ use logdock_infra::SystemClock;
 use logdock_infra::health::{DataDirProbe, WriterHealth};
 use logdock_infra::identity::{Argon2Hasher, RandomTokens, new_setup_code};
 use logdock_infra::logs::{LogWriter, SegmentLogStore, SqliteLogStats, WriterConfig, WriterTask};
-use logdock_infra::segments::Segments;
+use logdock_infra::segments::{Segments, SqliteHousekeeping};
 use logdock_infra::sqlite::{
     Database, RandomKeys, SqliteAccounts, SqliteAudit, SqliteIngestCounter, SqliteKeys, SqliteProjects,
     SqliteSessions,
@@ -115,7 +115,15 @@ impl App {
             LogLimits::default(),
         );
         let probe = DataDirProbe::new(db.clone(), config.data_dir.clone(), writers);
-        let retention = RetentionUseCases::new(RetentionPorts { probe: Arc::new(probe) }, config.retention);
+        let retention = RetentionUseCases::new(
+            RetentionPorts {
+                probe: Arc::new(probe),
+                catalog: segments.clone(),
+                housekeeping: Arc::new(SqliteHousekeeping::new(db.clone())),
+                clock: clock.clone(),
+            },
+            config.retention,
+        );
 
         let web_dir = config.web_dir.clone().filter(|dir| {
             let found = dir.join("index.html").is_file();
@@ -151,6 +159,23 @@ impl App {
                     Ok(0) => {}
                     Ok(count) => tracing::info!(count, "expired sessions deleted"),
                     Err(error) => tracing::warn!(%error, "cannot delete expired sessions"),
+                }
+            }
+        }));
+
+        let apply = retention.apply.clone();
+        tasks.push(every(Duration::from_secs(3600), stopped.clone(), move || {
+            let apply = apply.clone();
+            async move {
+                match apply.execute().await {
+                    Ok(report) if !report.deleted.is_empty() || report.closed > 0 => tracing::info!(
+                        deleted = report.deleted.len(),
+                        closed = report.closed,
+                        pruned_rollups = report.pruned_rollups,
+                        "retention applied"
+                    ),
+                    Ok(_) => {}
+                    Err(error) => tracing::warn!(%error, "cannot apply the retention"),
                 }
             }
         }));

@@ -63,6 +63,10 @@ mod tests {
         async fn stalled_writers(&self) -> Vec<&'static str> {
             self.stalled.clone()
         }
+
+        async fn database_bytes(&self) -> Result<u64, PortError> {
+            Ok(0)
+        }
     }
 
     fn check(probe: Probe) -> CheckReadiness {

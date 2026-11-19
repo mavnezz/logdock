@@ -70,6 +70,7 @@ impl Config {
             logs_days: env.parse("LOGDOCK_RETENTION_LOGS_DAYS", defaults.logs_days, parse_days)?,
             events_days: env.parse("LOGDOCK_RETENTION_EVENTS_DAYS", defaults.events_days, parse_days)?,
             traces_days: env.parse("LOGDOCK_RETENTION_TRACES_DAYS", defaults.traces_days, parse_days)?,
+            rollups_days: env.parse("LOGDOCK_RETENTION_ROLLUPS_DAYS", defaults.rollups_days, parse_days)?,
             max_storage_bytes: env.parse("LOGDOCK_MAX_STORAGE", defaults.max_storage_bytes, parse_size)?,
             min_free_bytes: env.parse("LOGDOCK_MIN_FREE_DISK", defaults.min_free_bytes, parse_size)?,
         };

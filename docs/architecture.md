@@ -346,7 +346,9 @@ FTS5 uses an external content table over the message, the exception text and the
 show snippets with the matches highlighted. Structured filters use ordinary indexes, not FTS: project, environment,
 service, host, level, time and trace ID.
 
-[Open] Tokenizer and detail level, decided by a benchmark with real logs:
+Tokenizer and detail level, decided by the benchmark in step 3: `unicode61` with `tokenchars '_'` (so `order_id` is
+one token) and full detail, which keeps phrase queries. An attribute term (`request_id:…`) also asks the index for its
+value in the attributes column, then checks the key with `json_extract`. The options were:
 
 | Option | Finds | Cost |
 |---|---|---|
@@ -379,9 +381,10 @@ service, host, level, time and trace ID.
   average of up to about 12 a second; peaks are assumed at 20 times that, about 250 a second.
 - **Benchmark target (step 3).** Sustain 10 times that peak (2,500 entries a second for 10 minutes) on the target
   server without the queue growing. The results go into `docs/testing.md`. No throughput is claimed before then.
-- **Disk.** Assumed 1–2 KiB per entry including the index. At 1 million entries a day that is 1–2 GiB a day, and 30–60
-  GiB for 30 days, for that app alone. This is measured in step 3. [Open] Compressing the attributes could make it
-  smaller.
+- **Disk.** Measured in step 3 (docs/testing.md): 545 bytes per entry including the index. At 1 million entries a
+  day that is about 0.55 GB a day, and 16 GB for 30 days, for that app alone.
+- **Measured throughput.** 7,800–9,700 entries a second on a development workstation, three times the target. The
+  production server is still to be measured [Open].
 
 ### 5.7 Alternatives Considered
 
@@ -670,12 +673,12 @@ Decided on 2026-11-18:
 | D9 | The interface in English and German |
 | D10 | Every step of section 12 is built, monitoring (R2) and forwarders (R3) included, one commit per step |
 | D11 | Issues belong to a project and one of its environments: each stage has its own issues and their states |
+| D12 | FTS5 with `unicode61`, `tokenchars '_'` and full detail (step 3's benchmark) |
 
 Open:
 
 | # | Question | Needed by |
 |---|---|---|
-| O1 | FTS5 tokenizer and detail level | step 3, by benchmark |
 | O4 | Sample rate for monitoring; PHP-FPM or Octane | R2 |
 | O5 | The product's name: "Logdock" now covers more than logs, and its availability has not been checked | before a public release |
 

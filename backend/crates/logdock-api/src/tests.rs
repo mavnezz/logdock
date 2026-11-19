@@ -32,11 +32,56 @@ impl StorageProbe for Probe {
     async fn stalled_writers(&self) -> Vec<&'static str> {
         Vec::new()
     }
+
+    async fn database_bytes(&self) -> Result<u64, PortError> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl logdock_retention::application::ports::SegmentCatalog for Probe {
+    async fn segments(&self) -> Result<Vec<logdock_retention::domain::Segment>, PortError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete(
+        &self,
+        _: logdock_retention::domain::Kind,
+        _: logdock_kernel::Day,
+    ) -> Result<(), PortError> {
+        Ok(())
+    }
+
+    async fn close_before(&self, _: logdock_kernel::Day) -> Result<u32, PortError> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl logdock_retention::application::ports::Housekeeping for Probe {
+    async fn prune_rollups(&self, _: logdock_kernel::Timestamp) -> Result<u64, PortError> {
+        Ok(0)
+    }
+}
+
+struct Epoch;
+
+impl logdock_kernel::Clock for Epoch {
+    fn now(&self) -> logdock_kernel::Timestamp {
+        logdock_kernel::Timestamp::from_unix_seconds(0)
+    }
 }
 
 fn app(free: u64, web_dir: Option<std::path::PathBuf>) -> Router {
     let policy = RetentionPolicy { min_free_bytes: 10, ..RetentionPolicy::default() };
-    let retention = RetentionUseCases::new(RetentionPorts { probe: Arc::new(Probe { free }) }, policy);
+    let probe = Arc::new(Probe { free });
+    let ports = RetentionPorts {
+        probe: probe.clone(),
+        catalog: probe.clone(),
+        housekeeping: probe,
+        clock: Arc::new(Epoch),
+    };
+    let retention = RetentionUseCases::new(ports, policy);
     let config = ApiConfig { web_dir, ..ApiConfig::default() };
     let identity = logdock_identity::testing::TestIdentity::new().use_cases;
     let projects = logdock_projects::testing::TestProjects::new().use_cases;

@@ -117,6 +117,15 @@ impl StorageProbe for DataDirProbe {
     async fn stalled_writers(&self) -> Vec<&'static str> {
         self.writers.stalled(STALLED_AFTER)
     }
+
+    async fn database_bytes(&self) -> Result<u64, PortError> {
+        let path = self.db.path().display().to_string();
+        Ok(["", "-wal", "-shm"]
+            .iter()
+            .filter_map(|suffix| std::fs::metadata(format!("{path}{suffix}")).ok())
+            .map(|meta| meta.len())
+            .sum())
+    }
 }
 
 #[cfg(test)]
@@ -144,5 +153,6 @@ mod tests {
         assert!(probe.database_ok().await);
         assert!(probe.free_bytes().await.unwrap() > 0);
         assert!(probe.stalled_writers().await.is_empty());
+        assert!(probe.database_bytes().await.unwrap() > 0);
     }
 }

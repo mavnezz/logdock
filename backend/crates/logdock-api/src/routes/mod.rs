@@ -3,6 +3,7 @@ pub(crate) mod health;
 mod identity;
 pub(crate) mod logs;
 mod projects;
+mod system;
 
 use utoipa_axum::router::OpenApiRouter;
 
@@ -15,4 +16,5 @@ pub(crate) fn v1() -> OpenApiRouter<ApiState> {
         .merge(accounts::routes())
         .merge(projects::routes())
         .merge(logs::routes())
+        .merge(system::routes())
 }

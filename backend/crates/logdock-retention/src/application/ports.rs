@@ -1,7 +1,9 @@
 //! What this context needs from the outside world.
 
 use async_trait::async_trait;
-use logdock_kernel::PortError;
+use logdock_kernel::{Day, PortError, Timestamp};
+
+use crate::domain::{Kind, Segment};
 
 /// The state of the data directory and the writers.
 #[async_trait]
@@ -15,4 +17,27 @@ pub trait StorageProbe: Send + Sync {
     /// Writers that have had work waiting without committing any for too
     /// long.
     async fn stalled_writers(&self) -> Vec<&'static str>;
+
+    /// The size of the main database's files.
+    async fn database_bytes(&self) -> Result<u64, PortError>;
+}
+
+/// The day segments.
+#[async_trait]
+pub trait SegmentCatalog: Send + Sync {
+    /// Every segment with its size.
+    async fn segments(&self) -> Result<Vec<Segment>, PortError>;
+
+    async fn delete(&self, kind: Kind, day: Day) -> Result<(), PortError>;
+
+    /// Closes the segments of days before `today` that are not closed yet;
+    /// returns how many.
+    async fn close_before(&self, today: Day) -> Result<u32, PortError>;
+}
+
+/// What the main database keeps beside the segments.
+#[async_trait]
+pub trait Housekeeping: Send + Sync {
+    /// Deletes counts per minute from before `before`; returns how many rows.
+    async fn prune_rollups(&self, before: Timestamp) -> Result<u64, PortError>;
 }

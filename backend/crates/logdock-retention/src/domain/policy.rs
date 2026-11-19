@@ -41,6 +41,9 @@ pub struct RetentionPolicy {
     pub logs_days: u32,
     pub events_days: u32,
     pub traces_days: u32,
+    /// Counts per minute (charts, monitoring): kept longer than what they
+    /// count.
+    pub rollups_days: u32,
     /// All segments together; `0` means no limit.
     pub max_storage_bytes: u64,
     /// Below this much free space ingest is refused.
@@ -53,6 +56,7 @@ impl Default for RetentionPolicy {
             logs_days: 30,
             events_days: 90,
             traces_days: 7,
+            rollups_days: 90,
             max_storage_bytes: 50 * 1024 * 1024 * 1024,
             min_free_bytes: 2 * 1024 * 1024 * 1024,
         }
@@ -155,6 +159,7 @@ mod tests {
             logs_days: 3,
             events_days: 5,
             traces_days: 1,
+            rollups_days: 10,
             max_storage_bytes: max,
             min_free_bytes: 0,
         }

@@ -145,3 +145,77 @@ async fn refuses_more_than_its_queue_holds() {
     drop(writer);
     task.finish().await;
 }
+
+/// The sizing benchmark of docs/testing.md: entries like a Laravel app's,
+/// written through the writer as ingest would, then searched.
+///
+/// `cargo test -p logdock-infra --release -- --ignored --nocapture benchmark`
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "a benchmark; run it on purpose"]
+async fn benchmark() {
+    let total: usize = std::env::var("BENCH_ENTRIES").ok().and_then(|n| n.parse().ok()).unwrap_or(200_000);
+    let (db, dir) = database().await;
+    let segments = Arc::new(Segments::new(dir.path().join("segments"), db));
+    let config = WriterConfig { queue: 1_000_000, batch: 2_000 };
+    let (writer, task) = LogWriter::start(Arc::clone(&segments), &WriterHealth::default(), config);
+    let messages = [
+        "Payment declined for order {id}",
+        "Job App\\Jobs\\SendInvoiceMail processed in 182 ms",
+        "SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock",
+        "User {id} signed in from 203.0.113.7",
+        "Cache miss for key products.page.3",
+    ];
+    let started = std::time::Instant::now();
+    let mut sent = 0;
+    while sent < total {
+        let batch: Vec<LogEntry> = (sent..(sent + 100).min(total))
+            .map(|i| {
+                let mut e = entry(
+                    DAY + (i as i64) / 50,
+                    DAY + 1,
+                    &messages[i % messages.len()].replace("{id}", &i.to_string()),
+                );
+                e.attributes.push(("request_id".into(), Value::String(format!("{i:032x}"))));
+                e.attributes.push(("route".into(), Value::String("orders.store".into())));
+                e
+            })
+            .collect();
+        sent += batch.len();
+        // As the SDK endpoint does: queued, not waited for; the last batch waits.
+        let wait = sent >= total;
+        assert_eq!(writer.submit(batch, wait).await.unwrap(), Submitted::Accepted);
+    }
+    let elapsed = started.elapsed();
+    let bytes = segments.bytes(logdock_retention::domain::Kind::Logs, Day::from_days(20_000));
+    let store = SegmentLogStore::new(Arc::clone(&segments));
+    let search = std::time::Instant::now();
+    let found = store
+        .search(&LogQuery { text: SearchText::parse("deadlock"), limit: 100, ..LogQuery::default() })
+        .await
+        .unwrap();
+    let search_ms = search.elapsed().as_millis();
+    let attribute = std::time::Instant::now();
+    let by_attribute = store
+        .search(&LogQuery {
+            text: SearchText::parse(&format!("request_id:{:032x}", total / 2)),
+            limit: 100,
+            ..LogQuery::default()
+        })
+        .await
+        .unwrap();
+    let attribute_ms = attribute.elapsed().as_millis();
+    let page = std::time::Instant::now();
+    store.search(&LogQuery { limit: 100, ..LogQuery::default() }).await.unwrap();
+    let page_ms = page.elapsed().as_millis();
+    println!(
+        "benchmark: {total} entries in {:.2} s = {:.0} entries/s; {:.0} bytes/entry on disk; \
+         full-text 'deadlock' {search_ms} ms ({} found), attribute {attribute_ms} ms ({} found), newest page {page_ms} ms",
+        elapsed.as_secs_f64(),
+        total as f64 / elapsed.as_secs_f64(),
+        bytes as f64 / total as f64,
+        found.entries.len(),
+        by_attribute.entries.len(),
+    );
+    drop(writer);
+    task.finish().await;
+}

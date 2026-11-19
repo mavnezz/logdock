@@ -31,7 +31,7 @@ impl SegmentLogStore {
 /// phrase quoted, so nothing typed is taken for FTS5's own syntax.
 pub(crate) fn match_expression(query: &LogQuery) -> Option<String> {
     let quote = |text: &str| format!("\"{}\"", text.replace('"', "\"\""));
-    let parts: Vec<String> = query
+    let mut parts: Vec<String> = query
         .text
         .text_terms()
         .map(|term| match term {
@@ -40,6 +40,13 @@ pub(crate) fn match_expression(query: &LogQuery) -> Option<String> {
             Term::Attribute { .. } => unreachable!("text_terms() has no attributes"),
         })
         .collect();
+    // An attribute's value must appear in the indexed attributes: the index
+    // narrows the rows, json_extract then checks the key.
+    for (_, value) in query.text.attributes() {
+        if value.chars().any(char::is_alphanumeric) {
+            parts.push(format!("attributes : {}", quote(value)));
+        }
+    }
     (!parts.is_empty()).then(|| parts.join(" "))
 }
 

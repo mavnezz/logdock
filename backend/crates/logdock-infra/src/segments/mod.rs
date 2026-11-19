@@ -265,6 +265,64 @@ impl Segments {
     }
 }
 
+#[async_trait::async_trait]
+impl logdock_retention::application::ports::SegmentCatalog for Segments {
+    async fn segments(&self) -> Result<Vec<logdock_retention::domain::Segment>, PortError> {
+        Ok(self
+            .all()
+            .await?
+            .into_iter()
+            .map(|entry| logdock_retention::domain::Segment {
+                kind: entry.kind,
+                day: entry.day,
+                bytes: self.bytes(entry.kind, entry.day),
+            })
+            .collect())
+    }
+
+    async fn delete(&self, kind: Kind, day: Day) -> Result<(), PortError> {
+        Segments::delete(self, kind, day).await
+    }
+
+    async fn close_before(&self, today: Day) -> Result<u32, PortError> {
+        let mut closed = 0;
+        for entry in self.all().await?.into_iter().filter(|e| !e.closed && e.day < today) {
+            Segments::close(self, entry.kind, entry.day).await?;
+            closed += 1;
+        }
+        Ok(closed)
+    }
+}
+
+/// [`Housekeeping`](logdock_retention::application::ports::Housekeeping) on
+/// the main database's counts.
+#[derive(Debug, Clone)]
+pub struct SqliteHousekeeping {
+    db: Database,
+}
+
+impl SqliteHousekeeping {
+    pub fn new(db: Database) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait::async_trait]
+impl logdock_retention::application::ports::Housekeeping for SqliteHousekeeping {
+    async fn prune_rollups(&self, before: Timestamp) -> Result<u64, PortError> {
+        let mut pruned = 0;
+        for statement in ["DELETE FROM log_rollups WHERE minute < ?"] {
+            let done = sqlx::query(statement)
+                .bind(before.unix_seconds())
+                .execute(self.db.pool())
+                .await
+                .map_err(port)?;
+            pruned += done.rows_affected();
+        }
+        Ok(pruned)
+    }
+}
+
 fn entry(kind: Kind, row: &sqlx::sqlite::SqliteRow) -> CatalogEntry {
     CatalogEntry {
         kind,
@@ -328,5 +386,32 @@ mod tests {
         assert!(segments.all().await.unwrap().is_empty());
         segments.close_readers().await;
         assert_eq!(segments.root(), dir.path().join("segments"));
+    }
+
+    #[tokio::test]
+    async fn serves_as_the_retention_catalog() {
+        use logdock_retention::application::ports::{Housekeeping, SegmentCatalog};
+
+        let (db, dir) = database().await;
+        let segments = Segments::new(dir.path().join("segments"), db.clone());
+        for day in [Day::from_days(10), Day::from_days(11)] {
+            let writer = segments.open_writer(Kind::Logs, day).await.unwrap();
+            writer.close().await.unwrap();
+        }
+        let listed = SegmentCatalog::segments(&segments).await.unwrap();
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().all(|s| s.bytes > 0));
+        assert_eq!(segments.close_before(Day::from_days(11)).await.unwrap(), 1);
+        assert_eq!(segments.close_before(Day::from_days(11)).await.unwrap(), 0, "closed already");
+        SegmentCatalog::delete(&segments, Kind::Logs, Day::from_days(10)).await.unwrap();
+        assert_eq!(SegmentCatalog::segments(&segments).await.unwrap().len(), 1);
+
+        sqlx::query("INSERT INTO log_rollups (project_id, environment_id, service, level, minute, count) VALUES (1, 1, '', 3, 60, 1), (1, 1, '', 3, 600, 1)")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        let pruned =
+            SqliteHousekeeping::new(db).prune_rollups(Timestamp::from_unix_seconds(300)).await.unwrap();
+        assert_eq!(pruned, 1);
     }
 }

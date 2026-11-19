@@ -371,6 +371,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/info": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The version that runs, and where it is reached. */
+        get: operations["info"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How much each kind of data takes, and the limits. */
+        get: operations["storage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/live": {
         parameters: {
             query?: never;
@@ -537,6 +571,18 @@ export interface components {
             prefix: string;
             revoked_at?: string | null;
         };
+        KindUsage: {
+            /** Format: int64 */
+            bytes: number;
+            /** @description `logs`, `events` or `traces`. */
+            kind: string;
+            /** @description The oldest day kept, `YYYY-MM-DD`. */
+            oldest?: string | null;
+            /** Format: int32 */
+            retention_days: number;
+            /** Format: int32 */
+            segments: number;
+        };
         LastRejection: {
             at: string;
             detail: string;
@@ -666,6 +712,32 @@ export interface components {
              *     the setup code from Logdock's log.
              */
             needed: boolean;
+        };
+        Storage: {
+            /** Format: int64 */
+            database_bytes: number;
+            /** Format: int64 */
+            free_bytes?: number | null;
+            kinds: components["schemas"]["KindUsage"][];
+            /**
+             * Format: int64
+             * @description Above this, the oldest days are deleted; 0 for no limit.
+             */
+            max_storage_bytes: number;
+            /**
+             * Format: int64
+             * @description Below this much free space ingest is refused.
+             */
+            min_free_bytes: number;
+            /** Format: int32 */
+            rollups_days: number;
+            /** Format: int64 */
+            segment_bytes: number;
+        };
+        SystemInfo: {
+            /** @description The address SDKs and forwarders send to. */
+            public_url?: string | null;
+            version: string;
         };
         UpdateAccountRequest: {
             disabled?: boolean | null;
@@ -1644,6 +1716,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    info: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemInfo"];
+                };
+            };
+        };
+    };
+    storage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Storage"];
                 };
             };
         };
