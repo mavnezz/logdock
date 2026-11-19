@@ -261,7 +261,8 @@ An event is stored redacted (6) and compressed. It holds:
 
 - the SDK's event ID, the time, release, environment, service, host and container;
 - the trace ID and the transaction (the route, or the job's class);
-- the exception chain: type, value, and frames with filename, function, line, `in_app` and context line;
+- the exception chain: type, value, and frames with filename, function, line, `in_app` and the line itself; the code
+  around it only for the app's own frames;
 - the message, tags and contexts;
 - the breadcrumbs. By default the SDK records logs, SQL queries (without bindings), cache, queue, HTTP client and
   notifications;
@@ -275,11 +276,15 @@ will not match Sentry's or Bugsink's. Issues start fresh after the switch; Bugsi
 
 1. The SDK's `fingerprint`, when there is one (`{{ default }}` expands to rules 2–4).
 2. The exception chain with in-app frames. For each exception its type, and for each in-app frame the normalized
-   filename (the path below the project root) and the function. Line numbers are left out, so an unrelated edit does
-   not split an issue.
+   filename (the path below the project root) and the function. Line numbers are left out, also those in the names PHP
+   8.4 gives closures (`{closure:/app/routes/web.php:22}` counts as `{closure}`), so an unrelated edit does not split an
+   issue.
 3. Without in-app frames: the exception types and the first line of the value. Numbers, UUIDs and hex strings in the
    value are replaced.
 4. Without an exception: the message template, otherwise the first line of the message with numbers replaced.
+
+An event whose ID arrived in the last 24 hours already is taken and not kept again, so an SDK that sends twice does
+not count twice.
 
 **Issue.** An issue has a title, a culprit (the first in-app frame), first and last seen, a count and the releases it
 appeared in. Its latest event is kept in `logdock.db`, so the issue's page still works after its events have expired.
@@ -458,106 +463,32 @@ Patterns in free text catch only what they describe. They lower the risk; they d
 
 ## 8. Laravel Integration
 
-This section is a sketch. It is tested against the test app in step 6.
+How an app is set up is in [laravel.md](laravel.md); it is tested with the Laravel test app (`dev/laravel`) by
+`just e2e` (step 6). In short:
 
-### 8.1 Configuration
+- the app keeps Sentry's SDK (sentry/sentry-laravel 4.x) and points its DSN to Logdock; `SENTRY_ENABLE_LOGS=true` and
+  the `sentry_logs` channel in the log stack send its log entries as well;
+- a `tap` on that channel adds the container's `service` and `host` from the container's environment; the same values
+  go on errors as tags;
+- the stack gets `ignore_exceptions => true`, and the SDK's timeouts come down to 0.5 s to connect and 2 s in total.
 
-`.env`, the same for every container of an app and stage, except the last two lines:
+What the test app showed (2026-11-19, sentry-laravel 4.30.0, sentry-php 4.37.1, Laravel 13.43, PHP 8.4):
 
-```dotenv
-SENTRY_LARAVEL_DSN=https://<key>@logdock.example.com/<project-id>
-SENTRY_ENVIRONMENT=production
-SENTRY_RELEASE=<release-or-commit>
-SENTRY_SEND_DEFAULT_PII=false
-# SENTRY_TRACES_SAMPLE_RATE stays unset until R2
-LOG_STACK=daily,sentry_logs
-SENTRY_LOG_LEVEL=info
+- An error event has no `event_id` of its own; it is in the envelope's header.
+- PHP 8.4 names closures by file and line (`{closure:/app/routes/web.php:22}`); grouping drops the place (4.2), so an
+  edit above a route does not split its issue.
+- An event is about 115 KB, most of it the code around the lines of some 60 library frames. Logdock keeps the code
+  around the app's own lines only (4.2) and stores events compressed.
+- The SDK fills in PSR-3 placeholders and sends no template; `sentry.trace.parent_span_id` is the text `null` when there
+  is none.
+- A request's log entries and its error share a trace ID even without tracing; a queued job has its own trace and no
+  transaction name.
+- The container's name is the container's hostname, which is its ID unless the compose file sets `hostname`.
+- The real envelopes are kept as fixtures in `backend/crates/logdock-sentry/tests/fixtures/` and replayed by the feature
+  tests.
 
-# per container
-LOG_SERVICE=horizon
-LOG_SERVER=docker-host-02
-```
-
-`config/logging.php`:
-
-```php
-'service' => env('LOG_SERVICE', 'web'),
-'host' => env('LOG_SERVER', 'unknown'),
-
-'channels' => [
-    'stack' => [
-        'driver' => 'stack',
-        'channels' => explode(',', (string) env('LOG_STACK', 'single')),
-        'ignore_exceptions' => true,
-    ],
-
-    'sentry_logs' => [
-        'driver' => 'sentry_logs',
-        'level' => env('SENTRY_LOG_LEVEL', env('LOG_LEVEL', 'info')),
-        'tap' => [App\Logging\ContainerMetadata::class],
-    ],
-
-    // daily, single, … as before
-],
-```
-
-`app/Logging/ContainerMetadata.php`:
-
-```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Logging;
-
-use Illuminate\Log\Logger;
-use Monolog\LogRecord;
-
-final class ContainerMetadata
-{
-    public function __invoke(Logger $logger): void
-    {
-        $metadata = ['service' => config('logging.service'), 'host' => config('logging.host')];
-
-        $logger->pushProcessor(
-            static fn (LogRecord $record): LogRecord => $record->with(extra: [...$record->extra, ...$metadata]),
-        );
-    }
-}
-```
-
-In `AppServiceProvider::boot()`, the same metadata goes on errors and transactions as tags:
-
-```php
-\Sentry\configureScope(static function (\Sentry\State\Scope $scope): void {
-    $scope->setTag('service', (string) config('logging.service'));
-    $scope->setTag('host', (string) config('logging.host'));
-});
-```
-
-In `config/sentry.php` the timeouts come down from their defaults of 2 s to connect and 5 s in total, for example to
-`'http_connect_timeout' => 0.5` and `'http_timeout' => 2` [Assumption].
-
-### 8.2 Things to Know
-
-- **Per-container metadata comes from the container's environment**, through the `tap` above. Laravel's `Context` is
-  not suitable for it: the dispatching process's context is restored inside a queued job, so a job's logs would say
-  `web` instead of `horizon`.
-- **`ignore_exceptions => true`.** Laravel's default is `false`. Without it, an exception thrown by a log handler
-  reaches the code that logged, because Monolog rethrows it and Laravel sets no exception handler. Monolog's detection
-  of logging loops is on by default.
-- **Cost per request.** Under PHP-FPM, Symfony calls `fastcgi_finish_request()` before Laravel runs its terminate
-  callbacks. The SDK therefore sends after the visitor has the response, but the worker is busy until the send is done
-  or times out.
-- **When logs are sent.** The SDK sends its buffered logs when a request, command or job ends.
-  `SENTRY_LOG_FLUSH_THRESHOLD` sends them earlier, for long-running commands.
-- **Horizon and the scheduler** use the app's normal logging. Horizon has no log settings of its own, and `horizon:work`
-  is Laravel's queue worker. That worker does not reset Monolog's handlers between jobs; sentry-laravel flushes its own
-  buffer after each job.
-- **Versions.** Laravel 13, and Laravel 12 while it gets security fixes (until 2027-02-24); Monolog 3. sentry-laravel
-  4.15 or later for logs, 4.30 or later for `crons.monitor_scheduled_tasks` (R2).
-- **sentry-php 5.0.0-beta1** (2026-11-17) removes the hub API and `send_default_pii`. This section is revisited when
-  5.0 is stable, and CI tests the SDK versions the apps use (11).
+**Things to know** for app developers (Context and queued jobs, `ignore_exceptions`, when the SDK sends, the cost per
+request) are listed in [laravel.md](laravel.md#things-to-know).
 
 ---
 

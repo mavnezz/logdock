@@ -398,3 +398,79 @@ async fn the_test_mail_needs_a_server_and_addresses() {
     assert!(failed.json()["detail"].as_str().is_some_and(|d| !d.is_empty()));
     app.stop().await;
 }
+
+const FIXTURES: &str =
+    concat!(env!("CARGO_MANIFEST_DIR"), "/../logdock-sentry/tests/fixtures/sentry-laravel-4.30.0");
+
+fn fixture(name: &str) -> String {
+    std::fs::read_to_string(format!("{FIXTURES}/{name}")).unwrap()
+}
+
+/// What sentry-laravel sent from the test app, sent again as it came:
+/// gzipped, with its own envelope headers.
+#[tokio::test]
+async fn takes_what_sentry_laravel_really_sends() {
+    let app = TestApp::start().await;
+    let admin = Browser::setup(&app, "ada@example.com").await;
+    let (project, _, key) = project_with_key(&admin, "orders").await;
+    let post = |body: String| {
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        std::io::Write::write_all(&mut encoder, body.as_bytes()).unwrap();
+        let mut request = envelope_request(project, &key, String::new());
+        *request.body_mut() = Body::from(encoder.finish().unwrap());
+        request.headers_mut().insert(header::CONTENT_ENCODING, "gzip".parse().unwrap());
+        request
+    };
+
+    let request_event = fixture("event-request.envelope");
+    for body in [request_event.clone(), fixture("event-job.envelope"), fixture("logs.envelope")] {
+        let answer = app.request(post(body)).await;
+        assert_eq!(answer.status, StatusCode::OK, "{}", answer.text());
+    }
+    // An SDK that sends an event twice: it is kept once.
+    assert_eq!(app.request(post(request_event.clone())).await.status, StatusCode::OK);
+    // The same error after an edit above the route: PHP 8.4 names the
+    // closure by its new line, the issue stays the same.
+    let edited = request_event
+        .replace("web.php:22}", "web.php:30}")
+        .replace("626aba60e1bd4f41a112a8b52df2112f", "726aba60e1bd4f41a112a8b52df2112f");
+    assert_eq!(app.request(post(edited)).await.status, StatusCode::OK);
+
+    let issues = admin.get("/api/v1/issues?sort=first_seen").await.json();
+    assert_eq!(issues.as_array().unwrap().len(), 2, "{issues}");
+    let request =
+        issues.as_array().unwrap().iter().find(|i| i["title"].as_str().unwrap().contains("42")).unwrap();
+    assert_eq!(request["title"], "PaymentFailed: Payment for order 42 failed");
+    assert_eq!(request["count"], 2, "the duplicate is not counted, the edited one is");
+    assert!(request["culprit"].as_str().unwrap().contains("/routes/web.php"), "{}", request["culprit"]);
+    let detail = admin.get(&format!("/api/v1/issues/{}", request["id"])).await.json();
+    let latest = &detail["latest"];
+    assert_eq!(latest["exceptions"][0]["type"], "RuntimeException");
+    assert_eq!(latest["exceptions"][1]["handled"], false);
+    assert_eq!(latest["transaction"], "/scenario/fail");
+    assert_eq!(latest["release"], "dev-1");
+    assert_eq!(latest["request"]["method"], "GET");
+    let headers = latest["request"]["headers"].as_array().unwrap();
+    assert!(headers.iter().any(|h| h[0] == "user-agent" && h[1] == "node"), "{headers:?}");
+    let vendor =
+        latest["exceptions"][1]["frames"].as_array().unwrap().iter().find(|f| f["in_app"] == false).unwrap();
+    assert!(vendor["pre_context"].as_array().unwrap().is_empty(), "no code around library lines");
+
+    let job =
+        issues.as_array().unwrap().iter().find(|i| i["title"].as_str().unwrap().contains("43")).unwrap();
+    let job = admin.get(&format!("/api/v1/issues/{}", job["id"])).await.json();
+    let tags: Vec<(String, String)> = serde_json::from_value(job["latest"]["tags"].clone()).unwrap();
+    assert!(tags.contains(&("service".into(), "horizon".into())), "{tags:?}");
+    assert!(job["latest"]["request"].is_null());
+
+    let logs = eventually(&admin, "/api/v1/logs?from=2026-01-01T00:00:00Z", |page| {
+        page["entries"].as_array().is_some_and(|e| e.len() == 2)
+    })
+    .await;
+    let slow = &logs["entries"][0];
+    assert_eq!(slow["message"], "Payment provider slow");
+    assert_eq!(slow["attributes"]["password"], "[redacted]");
+    assert!(slow["span_id"].is_null(), "sentry-php's \"null\" is no span: {}", slow["span_id"]);
+    assert_eq!(slow["container"], "99f03f3d15d9");
+    app.stop().await;
+}

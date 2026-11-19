@@ -401,14 +401,23 @@ fn limit_breadcrumbs(breadcrumbs: &mut Value) {
 }
 
 fn limit_frames_of(stacktrace: &mut Value) {
-    if let Value::Object(fields) = stacktrace
-        && let Some((_, Value::Array(frames))) = fields.iter_mut().find(|(k, _)| k == "frames")
-        && frames.len() > MAX_FRAMES
-    {
+    let Value::Object(fields) = stacktrace else { return };
+    let Some((_, Value::Array(frames))) = fields.iter_mut().find(|(k, _)| k == "frames") else { return };
+    if frames.len() > MAX_FRAMES {
         // Keep where it started and, above all, where it was thrown.
         let keep_start = 50;
         let drop = frames.len() - MAX_FRAMES;
         frames.drain(keep_start..keep_start + drop);
+    }
+    // The code around a library's line is most of an event's size (sentry-php
+    // sends five lines before and after for each of some 60 frames) and is
+    // rarely read; the line itself stays.
+    for frame in frames.iter_mut() {
+        if let Value::Object(fields) = frame
+            && !fields.iter().any(|(k, v)| k == "in_app" && *v == Value::Bool(true))
+        {
+            fields.retain(|(k, _)| k != "pre_context" && k != "post_context");
+        }
     }
 }
 
@@ -651,5 +660,16 @@ pub(crate) mod tests {
         let (prepared, _) = ErrorEvent::prepare(payload, &RedactionRules::default());
         let request = ErrorEvent::from_payload(prepared, None).request.unwrap();
         assert_eq!(request.headers, [("Accept".to_owned(), "text/html, application/json".to_owned())]);
+    }
+
+    #[test]
+    fn keeps_the_code_around_the_apps_own_lines_only() {
+        let frames = vec![frame("/vendor/x.php", "lib", 1, false), frame("/app/y.php", "mine", 2, true)];
+        let payload = object(vec![("stacktrace", object(vec![("frames", Value::Array(frames))]))]);
+        let (prepared, _) = ErrorEvent::prepare(payload, &RedactionRules::default());
+        let event = ErrorEvent::from_payload(prepared, None);
+        assert!(event.frames[0].pre_context.is_empty(), "the library's surroundings go");
+        assert_eq!(event.frames[0].context_line.as_deref(), Some("throw new RuntimeException();"));
+        assert_eq!(event.frames[1].pre_context, ["// before"]);
     }
 }

@@ -22,6 +22,8 @@ logdock-projects = { path = "crates/logdock-projects" }
 logdock-retention = { path = "crates/logdock-retention" }
 logdock-sentry = { path = "crates/logdock-sentry" }
 
+# Compression of stored error events (pure Rust backend).
+flate2 = "1"
 anyhow = "1"
 argon2 = "0.6"
 async-trait = "0.1"

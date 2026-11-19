@@ -108,6 +108,10 @@ pub trait EventStore: Send + Sync {
 
     async fn get(&self, event_id: &str) -> Result<Option<StoredEvent>, PortError>;
 
+    /// The issue of an event received since `since`, if there is one: what
+    /// an SDK sent twice is kept once.
+    async fn seen(&self, event_id: &str, since: Timestamp) -> Result<Option<IssueId>, PortError>;
+
     /// An issue's events, newest first, older than `before`.
     async fn list(
         &self,

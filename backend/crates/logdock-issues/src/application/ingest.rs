@@ -4,7 +4,7 @@ use logdock_kernel::redaction::RedactionRules;
 use logdock_kernel::{Scope, Timestamp, Value};
 
 use super::alerts::{NotifyPolicy, alert_mail};
-use super::{Context, IssueError};
+use super::{Context, IssueError, hours_ago};
 use crate::domain::{ErrorEvent, IssueId, NewIssue, fingerprint};
 
 /// What became of an event.
@@ -13,6 +13,8 @@ pub struct IngestedEvent {
     pub issue: IssueId,
     pub new: bool,
     pub regressed: bool,
+    /// The event was kept already; nothing changed.
+    pub duplicate: bool,
 }
 
 /// Events from the future get the time of receipt (an hour of skew is
@@ -41,6 +43,9 @@ impl IngestEvent {
         let event = ErrorEvent::from_payload(payload, envelope_event_id);
         if event.event_id.is_empty() {
             return Err(IssueError::NoEventId);
+        }
+        if let Some(issue) = c.ports.events.seen(&event.event_id, hours_ago(received, 24)).await? {
+            return Ok(IngestedEvent { issue, new: false, regressed: false, duplicate: true });
         }
         let latest = Timestamp::from_unix_seconds(received.unix_seconds() + MAX_SKEW_SECONDS);
         let time = event.time.filter(|t| *t <= latest).unwrap_or(received);
@@ -85,6 +90,6 @@ impl IngestEvent {
                 }
             });
         }
-        Ok(IngestedEvent { issue: issue.id, new, regressed: observation.regressed })
+        Ok(IngestedEvent { issue: issue.id, new, regressed: observation.regressed, duplicate: false })
     }
 }

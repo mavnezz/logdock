@@ -35,7 +35,12 @@ pub(crate) fn entry(log: SentryLog) -> (NewLogEntry, Option<String>) {
         level,
         template: attribute("sentry.message.template"),
         trace_id: log.trace_id.clone().filter(|t| !t.is_empty() && t.chars().any(|c| c != '0')),
-        span_id: log.span_id.clone().or_else(|| attribute("sentry.trace.parent_span_id")),
+        // sentry-php writes a missing parent span as the text "null".
+        span_id: log
+            .span_id
+            .clone()
+            .or_else(|| attribute("sentry.trace.parent_span_id"))
+            .filter(|s| !s.is_empty() && s != "null"),
         service: attribute("service"),
         host: attribute("host"),
         container: attribute("server.address"),

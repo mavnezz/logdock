@@ -177,6 +177,11 @@ impl EventStore for MemoryEvents {
         Ok(self.0.lock().unwrap().iter().find(|e| e.event.event_id == event_id).cloned())
     }
 
+    async fn seen(&self, event_id: &str, since: Timestamp) -> Result<Option<IssueId>, PortError> {
+        let events = self.0.lock().unwrap();
+        Ok(events.iter().find(|e| e.event.event_id == event_id && e.received >= since).map(|e| e.issue))
+    }
+
     async fn list(
         &self,
         issue: IssueId,

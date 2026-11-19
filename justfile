@@ -110,3 +110,12 @@ image:
 # Start Logdock with Docker Compose (compose.yaml), building the image
 up:
     docker compose up -d --build
+
+# End-to-end check with the Laravel test app in Docker (compose.dev.yaml);
+# --keep leaves it running
+e2e *args:
+    node dev/e2e/run.mjs {{args}}
+
+# Logdock, the Laravel test app and Mailpit in Docker, left running
+dev-stack:
+    node dev/e2e/run.mjs --keep

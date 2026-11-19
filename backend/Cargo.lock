@@ -1092,6 +1092,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "async-trait",
+ "flate2",
  "getrandom 0.4.3",
  "lettre",
  "logdock-identity",

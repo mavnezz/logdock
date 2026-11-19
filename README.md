@@ -10,7 +10,8 @@ sends to Logdock, and one web interface searches across all of them.
 - **Monitoring:** requests, jobs, queries, outgoing requests, cache and scheduled tasks.
 
 The apps keep using the Sentry SDK they already have; only the DSN points to Logdock.
-[docs/architecture.md](docs/architecture.md) explains how and why.
+[docs/laravel.md](docs/laravel.md) shows how an app is set up, [docs/architecture.md](docs/architecture.md) explains
+how and why.
 
 > **Status:** under construction, step by step along the plan in [docs/architecture.md](docs/architecture.md), 12.
 
@@ -35,6 +36,7 @@ just web-install   # frontend dependencies
 just dev           # the server on 127.0.0.1:8080, data in dev/data
 just web-dev       # the interface on http://localhost:5173
 just check         # everything CI checks
+just e2e           # Logdock and a Laravel test app in Docker, checked end to end
 ```
 
 | Path | Content |
@@ -42,4 +44,5 @@ just check         # everything CI checks
 | `backend/` | Cargo workspace: a crate per bounded context, `logdock-kernel`, `-infra`, `-api`, `logdockd` |
 | `frontend/` | Vue 3 interface |
 | `docker/Dockerfile`, `compose.yaml` | the image and how it runs |
-| `docs/` | architecture, testing, operations |
+| `dev/laravel`, `dev/e2e`, `compose.dev.yaml` | the Laravel test app and the end-to-end check |
+| `docs/` | architecture, Laravel setup, testing, operations |

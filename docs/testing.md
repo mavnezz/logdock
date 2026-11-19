@@ -43,4 +43,41 @@ server Logdock will run on was not measured yet [Open].
 
 ## End to end
 
-Described with the Laravel test app (step 6 of the delivery plan).
+`just e2e` (`dev/e2e/run.mjs`, Node 24 and Docker) runs Logdock and the Laravel
+test app together, as `compose.dev.yaml` describes them:
+
+- `logdock`, built from `docker/Dockerfile`, with Mailpit as its mail server;
+- the test app (`dev/laravel`: Laravel 13, sentry-laravel, set up as
+  [laravel.md](laravel.md) says) as `web`, `worker` (`queue:work`, named
+  `horizon`) and `scheduler`, sharing a SQLite database;
+- `capture` between the app and Logdock, which keeps what the SDK sent in
+  `dev/captured/`.
+
+The script starts from nothing, sets Logdock up, creates a project, a key and
+an address to notify, starts the app with the key's DSN, calls its scenarios
+(`/scenario/log`, `/fail`, `/handled`, `/job`, a scheduler run) and checks
+through Logdock's API:
+
+| Check | What it shows |
+|---|---|
+| a request's log entries arrive with service, host, release and stage | the tap and `.env` of laravel.md |
+| a password in a log context arrives as `[redacted]` | redaction on ingest |
+| entries below `SENTRY_LOG_LEVEL` stay out | the channel's level |
+| an exception becomes an issue with its cause, tags and in-app frames | events and grouping |
+| the request's log entries share the error's trace | "same trace" on the issue's page |
+| a job's entries and errors say `horizon`, not `web` | per-container metadata in queued jobs |
+| the scheduler's entries say `scheduler` | |
+| a new issue is mailed | notifications through SMTP |
+| ingest refused nothing, the envelopes were captured | |
+
+`just e2e --keep` (or `just dev-stack`) leaves it all running: Logdock on
+http://localhost:18480 (`dev@logdock.test`, `logdock-dev-password`), the app on
+http://localhost:18400 and Mailpit on http://localhost:18425.
+
+What the SDK sent is kept as fixtures in
+`backend/crates/logdock-sentry/tests/fixtures/`; the parser's tests and the
+feature test `takes_what_sentry_laravel_really_sends` replay them. To renew
+them for a new SDK version, run `just e2e` and copy from `dev/captured/`.
+
+The test app runs on the development machine only; the trial with a real app
+on a stage is the last part of step 6 [Open].

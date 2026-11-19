@@ -30,6 +30,27 @@ fn value_of(text: &str) -> Option<Value> {
     serde_json::from_str(text).ok().map(from_json)
 }
 
+/// An event's payload as kept in its segment: JSON compressed with
+/// deflate, about a fifth of its size.
+fn packed(value: &Value) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    // Writing to a Vec cannot fail.
+    let _ = encoder.write_all(json_text(value).as_bytes());
+    encoder.finish().unwrap_or_default()
+}
+
+/// A payload from its segment; plain JSON as well, as tests write it.
+fn unpacked(data: &[u8]) -> Option<Value> {
+    use std::io::Read;
+    if data.first() == Some(&b'{') {
+        return std::str::from_utf8(data).ok().and_then(value_of);
+    }
+    let mut text = String::new();
+    flate2::read::ZlibDecoder::new(data).read_to_string(&mut text).ok()?;
+    value_of(&text)
+}
+
 /// [`IssueRepository`] on the `issues` tables.
 #[derive(Debug, Clone)]
 pub struct SqliteIssues {
@@ -399,7 +420,7 @@ impl EventStore for SegmentEvents {
         .bind(&event.trace_id)
         .bind(&event.transaction)
         .bind(message)
-        .bind(json_text(&event.payload).into_bytes())
+        .bind(packed(&event.payload))
         .execute(&mut *connection)
         .await
         .map_err(port)?;
@@ -417,8 +438,7 @@ impl EventStore for SegmentEvents {
                 .map_err(port)?;
             if let Some(row) = row {
                 let data: Vec<u8> = row.get("data");
-                let payload =
-                    String::from_utf8(data).ok().as_deref().and_then(value_of).unwrap_or(Value::Null);
+                let payload = unpacked(&data).unwrap_or(Value::Null);
                 return Ok(Some(StoredEvent {
                     issue: IssueId::new(row.get("issue_id")),
                     scope: Scope {
@@ -428,6 +448,25 @@ impl EventStore for SegmentEvents {
                     received: Timestamp::from_unix_micros(row.get("received")),
                     event: ErrorEvent::from_payload(payload, Some(event_id)),
                 }));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn seen(&self, event_id: &str, since: Timestamp) -> Result<Option<IssueId>, PortError> {
+        // Duplicates come soon after: the segments of `since` and the day after.
+        for day in [since.day(), Day::from_days(since.day().days() + 1)] {
+            let Some(pool) = self.segments.reader(Kind::Events, day).await? else { continue };
+            let issue: Option<i64> = sqlx::query_scalar(
+                "SELECT issue_id FROM events WHERE event_id = ? AND received >= ? LIMIT 1",
+            )
+            .bind(event_id)
+            .bind(since.unix_micros())
+            .fetch_optional(&pool)
+            .await
+            .map_err(port)?;
+            if let Some(issue) = issue {
+                return Ok(Some(IssueId::new(issue)));
             }
         }
         Ok(None)

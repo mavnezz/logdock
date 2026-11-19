@@ -1,0 +1,116 @@
+# Logdock with a Laravel app that sends to it: for trying both together and
+# for the end-to-end check, `just e2e` (docs/testing.md). Not for a server:
+# fixed setup code and app key, plain HTTP, everything on localhost.
+#
+#   Logdock    http://localhost:18480   (setup code dev-setup-code)
+#   Laravel    http://localhost:18400   (/scenario/log, /fail, /handled, /job)
+#   Mailpit    http://localhost:18425   (the e-mail Logdock sends)
+#
+# The Laravel containers send to `capture`, which keeps a copy of what the
+# SDK sent in dev/captured/ and passes it on to Logdock. Their DSN comes from
+# LARAVEL_DSN, which dev/e2e/run.mjs creates.
+name: logdock-dev
+
+x-laravel: &laravel
+  build: dev/laravel
+  image: logdock-dev-laravel
+  restart: unless-stopped
+  volumes:
+    - laravel-data:/data
+  environment: &laravel-env
+    APP_NAME: orders-test
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_KEY: base64:juRKiTB/UWHBi0JhH4kNmky1fHXdaegm6zJR1ZOvIDM=
+    APP_URL: http://localhost:18400
+    QUEUE_CONNECTION: database
+    CACHE_STORE: file
+    SESSION_DRIVER: file
+    LOG_CHANNEL: stack
+    LOG_STACK: stderr,sentry_logs
+    LOG_LEVEL: debug
+    SENTRY_LARAVEL_DSN: ${LARAVEL_DSN:-}
+    SENTRY_ENVIRONMENT: production
+    SENTRY_RELEASE: ${LARAVEL_RELEASE:-dev-1}
+    SENTRY_SEND_DEFAULT_PII: "false"
+    SENTRY_ENABLE_LOGS: "true"
+    SENTRY_LOG_LEVEL: info
+    LOG_SERVER: dev-host
+
+services:
+  logdock:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: logdock:dev
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      LOGDOCK_PUBLIC_URL: http://localhost:18480
+      LOGDOCK_SECURE_COOKIES: "false"
+      LOGDOCK_SETUP_CODE: dev-setup-code
+      LOGDOCK_SMTP_URL: smtp://mailpit:1025
+      LOGDOCK_MAIL_FROM: Logdock <logdock@logdock.test>
+      LOGDOCK_LOG_FORMAT: text
+      LOGDOCK_MIN_FREE_DISK: 100MiB
+    ports:
+      - "127.0.0.1:18480:8080"
+    volumes:
+      - ./dev/data/logdock:/data
+
+  capture:
+    image: node:24-alpine
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    command: ["node", "/e2e/capture.mjs"]
+    environment:
+      UPSTREAM: http://logdock:8080
+      OUT: /captured
+    volumes:
+      - ./dev/e2e:/e2e:ro
+      - ./dev/captured:/captured
+
+  mailpit:
+    image: axllent/mailpit:v1.32
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18425:8025"
+
+  migrate:
+    <<: *laravel
+    restart: "no"
+    command: ["php", "artisan", "migrate", "--force"]
+
+  web:
+    <<: *laravel
+    environment:
+      <<: *laravel-env
+      LOG_SERVICE: web
+    ports:
+      - "127.0.0.1:18400:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *laravel
+    command: ["php", "artisan", "queue:work", "--sleep=1", "--tries=1"]
+    environment:
+      <<: *laravel-env
+      LOG_SERVICE: horizon
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *laravel
+    command: ["php", "artisan", "schedule:work"]
+    environment:
+      <<: *laravel-env
+      LOG_SERVICE: scheduler
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  laravel-data:

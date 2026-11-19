@@ -50,7 +50,7 @@ fn default_components(event: &ErrorEvent) -> Vec<String> {
                 parts.push(format!(
                     "{}|{}",
                     normalize_path(frame.filename.as_deref().or(frame.module.as_deref()).unwrap_or("")),
-                    frame.function.as_deref().unwrap_or("")
+                    normalize_function(frame.function.as_deref().unwrap_or(""))
                 ));
             }
         }
@@ -71,7 +71,7 @@ fn default_components(event: &ErrorEvent) -> Vec<String> {
             format!(
                 "{}|{}",
                 normalize_path(f.filename.as_deref().unwrap_or("")),
-                f.function.as_deref().unwrap_or("")
+                normalize_function(f.function.as_deref().unwrap_or(""))
             )
         })
         .collect();
@@ -123,6 +123,38 @@ fn normalize_path(path: &str) -> String {
         }
     }
     path.to_owned()
+}
+
+/// A function without where a closure is: PHP 8.4 names closures by file
+/// and line (`{closure:/app/routes/web.php:22}`,
+/// `{closure:App\Jobs\Sync::handle():40}`), so an edit above one would
+/// split its issue.
+fn normalize_function(function: &str) -> String {
+    let mut out = String::with_capacity(function.len());
+    let mut rest = function;
+    while let Some(at) = rest.find("{closure:") {
+        out.push_str(&rest[..at]);
+        out.push_str("{closure}");
+        // Closure names nest: {closure:{closure:/app/x.php:3}:4}.
+        let mut depth = 0;
+        let mut end = rest.len();
+        for (i, c) in rest[at..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = at + i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// A text with numbers, hexadecimal IDs and UUIDs replaced.
@@ -288,6 +320,13 @@ mod tests {
         assert_eq!(normalize("token deadbeef01 and v2"), "token <id> and v2");
         assert_eq!(normalize_path("/var/www/releases/42/app/Models/Order.php"), "/app/Models/Order.php");
         assert_eq!(normalize_path("./index.php"), "index.php");
+        assert_eq!(
+            normalize_function("Illuminate\\Routing\\RouteFileRegistrar::{closure:/app/routes/web.php:22}"),
+            "Illuminate\\Routing\\RouteFileRegistrar::{closure}"
+        );
+        assert_eq!(normalize_function("A::{closure:{closure:/app/x.php:3}:4}::b"), "A::{closure}::b");
+        assert_eq!(normalize_function("App\\Jobs\\Sync::handle"), "App\\Jobs\\Sync::handle");
+        assert_eq!(normalize_function("{closure:broken"), "{closure}");
         let long = "x".repeat(300);
         let title = fingerprint(&event(object(vec![("message", s(&long))]))).title;
         assert_eq!(title.chars().count(), TITLE_CHARS + 1);
