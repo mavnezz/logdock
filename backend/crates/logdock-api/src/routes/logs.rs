@@ -61,7 +61,7 @@ pub struct LogEntry {
     pub span_id: Option<String>,
     pub user_id: Option<String>,
     /// The attributes, flattened (`user.id`), in the order they were sent.
-    #[schema(value_type = Object)]
+    #[schema(value_type = std::collections::HashMap<String, serde_json::Value>)]
     pub attributes: serde_json::Value,
     /// How many values redaction replaced.
     pub redactions: u32,

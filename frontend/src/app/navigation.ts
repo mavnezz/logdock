@@ -10,6 +10,7 @@ export interface NavItem {
 }
 
 export const navigation: NavItem[] = [
+  { name: 'logs', path: '/logs', icon: 'logs', section: 'observe' },
   { name: 'projects', path: '/projects', icon: 'projects', section: 'setup' },
   { name: 'accounts', path: '/accounts', icon: 'accounts', admin: true },
   { name: 'audit', path: '/audit', icon: 'audit', admin: true },

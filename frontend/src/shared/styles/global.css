@@ -102,32 +102,29 @@
 }
 
 /*
- * Log levels, one colour each, the same in lists, badges and charts. Error
- * and fatal share the destructive red; warnings are amber, info blue,
- * debug and trace muted.
+ * Log levels in four groups, validated as a palette (dataviz validator, all
+ * pairs, both schemes): debug (with trace), info, warn, error (with fatal).
+ * Lists and the chart use the same colours; a label always goes with them.
  */
 :root {
-  --level-trace: oklch(0.7 0 0);
-  --level-debug: oklch(0.6 0.02 260);
-  --level-info: var(--info);
-  --level-warn: var(--warning);
-  --level-error: var(--destructive);
-  --level-fatal: oklch(0.45 0.2 20);
+  --level-debug: #1baf7a;
+  --level-info: #2a78d6;
+  --level-warn: #eda100;
+  --level-error: #d03b3b;
 }
 
 .dark {
-  --level-trace: oklch(0.55 0 0);
-  --level-debug: oklch(0.65 0.02 260);
-  --level-fatal: oklch(0.65 0.24 20);
+  --level-debug: #199e70;
+  --level-info: #3987e5;
+  --level-warn: #c98500;
+  --level-error: #d03b3b;
 }
 
 @theme inline {
-  --color-level-trace: var(--level-trace);
   --color-level-debug: var(--level-debug);
   --color-level-info: var(--level-info);
   --color-level-warn: var(--level-warn);
   --color-level-error: var(--level-error);
-  --color-level-fatal: var(--level-fatal);
 }
 
 /*

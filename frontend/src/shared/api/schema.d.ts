@@ -590,7 +590,9 @@ export interface components {
         };
         LogEntry: {
             /** @description The attributes, flattened (`user.id`), in the order they were sent. */
-            attributes: Record<string, never>;
+            attributes: {
+                [key: string]: unknown;
+            };
             container?: string | null;
             /** Format: int64 */
             environment_id: number;

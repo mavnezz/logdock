@@ -2072,7 +2072,11 @@
         "properties": {
           "attributes": {
             "type": "object",
-            "description": "The attributes, flattened (`user.id`), in the order they were sent."
+            "description": "The attributes, flattened (`user.id`), in the order they were sent.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
           },
           "container": {
             "type": [
