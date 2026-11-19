@@ -3,7 +3,6 @@
 #
 #   cp .env.example .env      # set LOGDOCK_PUBLIC_URL at least
 #   mkdir -p data             # owned by PUID:PGID
-#   docker login ghcr.io -u <github-user>   # while the repository is private
 #   docker compose pull && docker compose up -d   # the same two update it
 #
 # `latest` follows main; LOGDOCK_IMAGE pins a version, e.g.

@@ -14,10 +14,9 @@ docker compose logs logdock | grep setup_code
 
 With the image CI publishes, `compose.ghcr.yaml` takes the place of
 `compose.yaml`: copied to the server as `compose.yaml`, beside `.env`, it
-pulls `ghcr.io/mavnezz/logdock` (`LOGDOCK_IMAGE` pins a version), after
-`docker login ghcr.io` with a token that may read packages while the
-repository is private. `docker compose pull && docker compose up -d`
-updates it.
+pulls `ghcr.io/mavnezz/logdock` (`LOGDOCK_IMAGE` pins a version), which is
+public: no `docker login` is needed. `docker compose pull && docker compose
+up -d` updates it.
 
 Open `LOGDOCK_PUBLIC_URL/setup`, enter the setup code from the log and create the
 first administrator. The code is only written while there is no account; set

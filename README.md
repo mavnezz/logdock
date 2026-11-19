@@ -37,7 +37,6 @@ directly over plain HTTP, it is `http://<host>:8080`, see [docs/operations.md](d
 
 ```bash
 mkdir -p data
-docker login ghcr.io -u <github-user>          # while the repository is private: a token with read:packages
 docker compose pull && docker compose up -d    # the same two commands update it
 ```
 
