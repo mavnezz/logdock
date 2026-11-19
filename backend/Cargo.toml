@@ -16,6 +16,8 @@ logdock-api = { path = "crates/logdock-api" }
 logdock-identity = { path = "crates/logdock-identity" }
 logdock-infra = { path = "crates/logdock-infra" }
 logdock-issues = { path = "crates/logdock-issues" }
+logdock-monitors = { path = "crates/logdock-monitors" }
+logdock-performance = { path = "crates/logdock-performance" }
 logdock-kernel = { path = "crates/logdock-kernel" }
 logdock-logs = { path = "crates/logdock-logs" }
 logdock-projects = { path = "crates/logdock-projects" }
@@ -24,6 +26,8 @@ logdock-sentry = { path = "crates/logdock-sentry" }
 
 # Compression of stored error events (pure Rust backend).
 flate2 = "1"
+# Time zones of scheduled tasks; the IANA database is built in, the image has none.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-always"] }
 anyhow = "1"
 argon2 = "0.6"
 async-trait = "0.1"

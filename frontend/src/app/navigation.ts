@@ -12,6 +12,8 @@ export interface NavItem {
 export const navigation: NavItem[] = [
   { name: 'logs', path: '/logs', icon: 'logs', section: 'observe' },
   { name: 'issues', path: '/issues', icon: 'issues' },
+  { name: 'performance', path: '/performance', icon: 'performance' },
+  { name: 'monitors', path: '/monitors', icon: 'monitors' },
   { name: 'projects', path: '/projects', icon: 'projects', section: 'setup' },
   { name: 'accounts', path: '/accounts', icon: 'accounts', admin: true },
   { name: 'audit', path: '/audit', icon: 'audit', admin: true },

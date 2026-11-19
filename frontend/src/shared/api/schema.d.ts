@@ -300,6 +300,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The scheduled tasks, those in trouble first. */
+        get: operations["list_monitors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/monitors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One scheduled task with its latest runs. */
+        get: operations["get_monitor"];
+        put?: never;
+        post?: never;
+        /**
+         * Forgets a scheduled task, for one that was removed from the schedule;
+         *     its next check-in brings it back.
+         */
+        delete: operations["delete_monitor"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The names of one kind over a range, where the time goes first. */
+        get: operations["overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/performance/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Requests, jobs or commands of one name, each with its trace. */
+        get: operations["samples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/performance/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One name over a range, in about 60 buckets. */
+        get: operations["series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -499,7 +588,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Everything that carries one trace ID: log entries and error events. */
+        /** Everything that carries one trace ID. */
         get: operations["get_trace"];
         put?: never;
         post?: never;
@@ -600,6 +689,21 @@ export interface components {
              * @description With `mute`: for this many minutes.
              */
             mute_minutes?: number | null;
+        };
+        CheckInDto: {
+            check_in_id: string;
+            /** Format: double */
+            duration_ms?: number | null;
+            finished?: string | null;
+            release?: string | null;
+            /** @description For a missed run, when it should have started. */
+            started: string;
+            /**
+             * @description `in_progress`, `ok`, `error`, `missed` (expected, never started) or
+             *     `timeout` (did not finish in time).
+             */
+            status: string;
+            trace_id?: string | null;
         };
         CreateAccountRequest: {
             email: string;
@@ -875,6 +979,45 @@ export interface components {
             email: string;
             password: string;
         };
+        Monitor: {
+            created_at: string;
+            /** Format: int64 */
+            environment_id: number;
+            /** @description `new`, `ok`, `failing` or `missed`. */
+            health: string;
+            /** Format: int64 */
+            id: number;
+            last_check_in?: string | null;
+            /** @description `in_progress`, `ok`, `error`, `missed` or `timeout`. */
+            last_status?: string | null;
+            /** Format: int64 */
+            margin_minutes?: number | null;
+            /** Format: int64 */
+            max_runtime_minutes?: number | null;
+            /** @description The slug without sentry-laravel's prefix. */
+            name: string;
+            /** @description When the next run should start. */
+            next_run?: string | null;
+            /** Format: int64 */
+            project_id: number;
+            /** @description A crontab (`0 3 * * *`) or `every 10 minute`; `null` without one. */
+            schedule?: string | null;
+            /** @description As the SDK names it: `scheduled_nightly-report`. */
+            slug: string;
+            timezone?: string | null;
+        };
+        MonitorDetail: {
+            /** @description The latest 100, newest first. */
+            check_ins: components["schemas"]["CheckInDto"][];
+            monitor: components["schemas"]["Monitor"];
+        };
+        NamedStats: components["schemas"]["Stats"] & {
+            /**
+             * @description `GET /orders/{order}`, `App\Jobs\SendInvoice`, a normalized statement,
+             *     `POST api.stripe.com`, `get user:<n>:cart`.
+             */
+            name: string;
+        };
         PasswordRequest: {
             current: string;
             new: string;
@@ -935,6 +1078,34 @@ export interface components {
         ResetPasswordRequest: {
             password: string;
         };
+        Sample: {
+            /** Format: double */
+            duration_ms: number;
+            /** Format: int64 */
+            environment_id: number;
+            failed: boolean;
+            host?: string | null;
+            /** Format: int64 */
+            http_status?: number | null;
+            name: string;
+            /** Format: int64 */
+            project_id: number;
+            release?: string | null;
+            service?: string | null;
+            start: string;
+            status?: string | null;
+            trace_id: string;
+        };
+        SeriesBucket: components["schemas"]["Stats"] & {
+            start: string;
+        };
+        SeriesPage: {
+            /** Format: int64 */
+            bucket_seconds: number;
+            /** @description Every bucket of the range, oldest first. */
+            buckets: components["schemas"]["SeriesBucket"][];
+            total: components["schemas"]["Stats"];
+        };
         Session: {
             account: components["schemas"]["Account"];
             /** @description Sent back in `X-CSRF-Token` with every request that changes something. */
@@ -982,6 +1153,32 @@ export interface components {
             post_context: string[];
             pre_context: string[];
         };
+        /** @description What a range of one name adds up to. */
+        Stats: {
+            /** Format: double */
+            average_ms: number;
+            /** Format: int64 */
+            count: number;
+            /**
+             * Format: int64
+             * @description Failed requests, jobs, commands, queries or outgoing requests; for
+             *     the cache, misses.
+             */
+            flagged: number;
+            /** Format: double */
+            max_ms: number;
+            /**
+             * Format: double
+             * @description Estimated from a histogram of durations.
+             */
+            p50_ms: number;
+            /** Format: double */
+            p95_ms: number;
+            /** Format: double */
+            p99_ms: number;
+            /** Format: double */
+            total_ms: number;
+        };
         Storage: {
             /** Format: int64 */
             database_bytes: number;
@@ -1027,6 +1224,49 @@ export interface components {
             /** @description The trace's log entries, oldest first (at most 500). */
             logs: components["schemas"]["LogEntry"][];
             trace_id: string;
+            /**
+             * @description The requests, jobs and commands of the trace, oldest first; a job
+             *     continues the trace of the request that queued it.
+             */
+            transactions: components["schemas"]["TraceTransaction"][];
+        };
+        TraceSpan: {
+            data: Record<string, never>;
+            description?: string | null;
+            /** Format: int64 */
+            duration_us: number;
+            /** @description `db.sql.query`, `http.client`, `cache.get`, `view.render`, … */
+            op: string;
+            parent_span_id?: string | null;
+            span_id: string;
+            start: string;
+            status?: string | null;
+        };
+        TraceTransaction: {
+            container?: string | null;
+            /** Format: int64 */
+            duration_us: number;
+            /** Format: int64 */
+            environment_id: number;
+            failed: boolean;
+            host?: string | null;
+            /** Format: int64 */
+            http_status?: number | null;
+            /** @description `request`, `job`, `command` or `other`. */
+            kind: string;
+            /** @description As counted: `GET /orders/{order}`. */
+            name: string;
+            op: string;
+            parent_span_id?: string | null;
+            /** Format: int64 */
+            project_id: number;
+            release?: string | null;
+            service?: string | null;
+            span_id: string;
+            /** @description Oldest first. */
+            spans: components["schemas"]["TraceSpan"][];
+            start: string;
+            status?: string | null;
         };
         UpdateAccountRequest: {
             disabled?: boolean | null;
@@ -1745,6 +1985,215 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_monitors: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_monitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorDetail"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_monitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    overview: {
+        parameters: {
+            query: {
+                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                kind: string;
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description RFC 3339; the last 24 hours by default. */
+                from?: string;
+                to?: string;
+                /** @description `total_time` (the default), `count`, `slowest` or `failures`. */
+                sort?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NamedStats"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    samples: {
+        parameters: {
+            query: {
+                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                kind: string;
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description RFC 3339; the last 24 hours by default. */
+                from?: string;
+                to?: string;
+                /** @description As listed by the overview. */
+                name: string;
+                /** @description `slowest` (the default) or `newest`. */
+                order?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Sample"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    series: {
+        parameters: {
+            query: {
+                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                kind: string;
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description RFC 3339; the last 24 hours by default. */
+                from?: string;
+                to?: string;
+                /** @description As listed by the overview. */
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesPage"];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

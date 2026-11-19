@@ -14,6 +14,8 @@ logdock-identity.workspace = true
 logdock-issues.workspace = true
 logdock-kernel.workspace = true
 logdock-logs.workspace = true
+logdock-monitors.workspace = true
+logdock-performance.workspace = true
 logdock-projects.workspace = true
 logdock-retention.workspace = true
 logdock-sentry.workspace = true
@@ -33,6 +35,8 @@ utoipa-axum.workspace = true
 logdock-identity = { workspace = true, features = ["testing"] }
 logdock-issues = { workspace = true, features = ["testing"] }
 logdock-logs = { workspace = true, features = ["testing"] }
+logdock-monitors = { workspace = true, features = ["testing"] }
+logdock-performance = { workspace = true, features = ["testing"] }
 logdock-projects = { workspace = true, features = ["testing"] }
 async-trait.workspace = true
 http-body-util.workspace = true

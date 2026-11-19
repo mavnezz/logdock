@@ -1,0 +1,26 @@
+[package]
+name = "logdock-performance"
+description = "Bounded context Performance: transactions, their spans, and rollups of requests, jobs, commands, queries, outgoing requests and cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Core crate of a bounded context: no I/O, no frameworks. Adapters live in
+# logdock-infra and logdock-api. See docs/architecture.md, 9.
+[dependencies]
+logdock-kernel.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+# In-memory implementations of all ports, for tests.
+testing = []
+
+[lints]
+workspace = true

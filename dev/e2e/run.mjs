@@ -132,6 +132,8 @@ async function main() {
   await scenario('fail', 500)
   await scenario('handled')
   await scenario('job')
+  await scenario('work')
+  await scenario('slow')
   compose(['exec', '-T', 'scheduler', 'php', 'artisan', 'schedule:run'])
 
   console.log('» checking what arrived')
@@ -209,6 +211,54 @@ async function main() {
   await check('the scheduler’s entries name the scheduler', async () => {
     const heartbeat = await entry('heartbeat')
     expect(heartbeat.service === 'scheduler', `service ${heartbeat.service}`)
+  })
+  const lastHour = () =>
+    `project=${project.id}&from=${new Date(Date.now() - 3_600_000).toISOString()}&to=${new Date(Date.now() + 60_000).toISOString()}`
+  const named = (kind, name) =>
+    eventually(`${kind} ${name}`, async () =>
+      (await logdock.get(`/api/v1/performance?kind=${kind}&${lastHour()}`)).find((r) => r.name === name),
+    )
+  await check('requests, jobs and what they spent their time on are measured', async () => {
+    const work = await named('request', 'GET /scenario/work')
+    const slow = await named('request', 'GET /scenario/slow')
+    expect(slow.p95_ms >= 300, `p95 of /scenario/slow: ${slow.p95_ms} ms`)
+    const job = await named('job', 'App\\Jobs\\ChargeOrder')
+    expect(job.flagged === 1, `the job failed ${job.flagged} times`)
+    await named('query', 'select ? as id, ? as total')
+    await named('outgoing', 'GET logdock:8080')
+    const miss = await named('cache', 'get exchange-rate')
+    expect(miss.flagged === 1, `cache misses ${miss.flagged}`)
+    const fail = await named('request', 'GET /scenario/fail')
+    expect(fail.flagged === 1, 'the 500 is a failure')
+    return `GET /scenario/work ${work.count}×, p95 ${work.p95_ms} ms`
+  })
+  await check('a request’s trace holds the job it queued', async () => {
+    const samples = await logdock.get(
+      `/api/v1/performance/samples?kind=request&name=${encodeURIComponent('GET /scenario/job')}&${lastHour()}`,
+    )
+    expect(samples.length > 0, 'no sample')
+    const trace = await eventually('the job in the trace', async () => {
+      const t = await logdock.get(`/api/v1/traces/${samples[0].trace_id}`)
+      return t.transactions.length >= 2 && t
+    })
+    const kinds = trace.transactions.map((t) => t.kind).join(', ')
+    expect(kinds === 'request, job', `kinds ${kinds}`)
+  })
+  await check('scheduled tasks become monitors; a failing one is mailed', async () => {
+    const monitors = await eventually('both monitors', async () => {
+      const list = await logdock.get(`/api/v1/monitors?project=${project.id}`)
+      return list.length >= 2 && list
+    })
+    const report = monitors.find((m) => m.name === 'nightly-report')
+    const heartbeat = monitors.find((m) => m.name === 'heartbeat')
+    expect(report?.health === 'failing', `nightly-report is ${report?.health}`)
+    expect(heartbeat?.health === 'ok', `heartbeat is ${heartbeat?.health}`)
+    expect(report.schedule === '* * * * *', `schedule ${report.schedule}`)
+    const mail = await eventually('the mail', async () => {
+      const messages = await (await fetch(`${MAILPIT}/api/v1/messages`)).json()
+      return messages.messages.find((m) => m.Subject.includes('nightly-report failed in orders-test / production'))
+    })
+    return mail.Subject
   })
   await check('new issues are mailed to the project’s addresses', async () => {
     const mail = await eventually('a mail', async () => {

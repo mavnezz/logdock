@@ -17,6 +17,8 @@ use logdock_infra::identity::{Argon2Hasher, RandomTokens, new_setup_code};
 use logdock_infra::issues::{SegmentEvents, SqliteIssues};
 use logdock_infra::logs::{LogWriter, SegmentLogStore, SqliteLogStats, WriterConfig, WriterTask};
 use logdock_infra::mail::SmtpMailer;
+use logdock_infra::monitors::{BundledTimeZones, ProjectNoticeTargets, SqliteMonitors};
+use logdock_infra::performance::{SegmentTransactions, SqliteRollups};
 use logdock_infra::segments::{Segments, SqliteHousekeeping};
 use logdock_infra::sqlite::{
     Database, RandomKeys, SqliteAccounts, SqliteAudit, SqliteIngestCounter, SqliteKeys, SqliteProjects,
@@ -26,6 +28,8 @@ use logdock_issues::application::{IssuePorts, IssueUseCases};
 use logdock_kernel::{Mailer, Secret};
 use logdock_logs::application::{LogPorts, LogUseCases};
 use logdock_logs::domain::LogLimits;
+use logdock_monitors::application::{MonitorPorts, MonitorUseCases};
+use logdock_performance::application::{PerformancePorts, PerformanceUseCases};
 use logdock_projects::application::{ProjectPorts, ProjectUseCases};
 use logdock_retention::application::{RetentionPorts, RetentionUseCases};
 use tokio::net::TcpListener;
@@ -41,6 +45,8 @@ pub struct App {
     counter: Arc<SqliteIngestCounter>,
     segments: Arc<Segments>,
     events: Arc<SegmentEvents>,
+    transactions: Arc<SegmentTransactions>,
+    rollups: Arc<SqliteRollups>,
     log_writer: WriterTask,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
@@ -130,6 +136,24 @@ impl App {
             IssuePorts {
                 issues: Arc::new(SqliteIssues::new(db.clone())),
                 events: events.clone(),
+                mailer: mailer.clone(),
+                audit: audit.clone(),
+                clock: clock.clone(),
+            },
+            config.public_url.clone(),
+        );
+        let transactions = Arc::new(SegmentTransactions::new(Arc::clone(&segments)));
+        let rollups = Arc::new(SqliteRollups::new(db.clone()));
+        let performance = PerformanceUseCases::new(PerformancePorts {
+            transactions: transactions.clone(),
+            rollups: rollups.clone(),
+            clock: clock.clone(),
+        });
+        let monitors = MonitorUseCases::new(
+            MonitorPorts {
+                monitors: Arc::new(SqliteMonitors::new(db.clone())),
+                zones: Arc::new(BundledTimeZones),
+                targets: Arc::new(ProjectNoticeTargets::new(db.clone())),
                 mailer,
                 audit: audit.clone(),
                 clock: clock.clone(),
@@ -173,6 +197,30 @@ impl App {
                 }
             }
         }));
+        let flush = rollups.clone();
+        tasks.push(every(Duration::from_secs(10), stopped.clone(), move || {
+            let flush = flush.clone();
+            async move {
+                if let Err(error) = flush.flush().await {
+                    tracing::warn!(%error, "cannot write the performance rollups");
+                }
+            }
+        }));
+        let sweep = monitors.sweep.clone();
+        tasks.push(every(Duration::from_secs(60), stopped.clone(), move || {
+            let sweep = sweep.clone();
+            async move {
+                match sweep.execute().await {
+                    Ok(report) if report.missed > 0 || report.timed_out > 0 => tracing::info!(
+                        missed = report.missed,
+                        timed_out = report.timed_out,
+                        "scheduled tasks did not run or took too long"
+                    ),
+                    Ok(_) => {}
+                    Err(error) => tracing::warn!(%error, "cannot check the scheduled tasks"),
+                }
+            }
+        }));
         let purge = identity.purge_sessions.clone();
         tasks.push(every(Duration::from_secs(3600), stopped.clone(), move || {
             let purge = purge.clone();
@@ -202,9 +250,20 @@ impl App {
             }
         }));
 
-        let use_cases = UseCases { identity, issues, logs, projects, retention };
+        let use_cases = UseCases { identity, issues, logs, monitors, performance, projects, retention };
         let router = logdock_api::router(ApiState::new(use_cases, api_config));
-        Ok(Self { router, db, counter, segments, events, log_writer: log_writer_task, stop, tasks })
+        Ok(Self {
+            router,
+            db,
+            counter,
+            segments,
+            events,
+            transactions,
+            rollups,
+            log_writer: log_writer_task,
+            stop,
+            tasks,
+        })
     }
 
     /// Finishes what is under way, within `timeout`, and closes the
@@ -218,6 +277,10 @@ impl App {
             // What is queued is written before the database closes.
             self.log_writer.finish().await;
             self.events.close().await;
+            self.transactions.close().await;
+            if let Err(error) = self.rollups.flush().await {
+                tracing::warn!(%error, "cannot write the performance rollups");
+            }
             self.segments.close_readers().await;
             if let Err(error) = self.counter.flush().await {
                 tracing::warn!(%error, "cannot write the ingest counts");

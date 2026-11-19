@@ -311,7 +311,12 @@ impl SqliteHousekeeping {
 impl logdock_retention::application::ports::Housekeeping for SqliteHousekeeping {
     async fn prune_rollups(&self, before: Timestamp) -> Result<u64, PortError> {
         let mut pruned = 0;
-        for statement in ["DELETE FROM log_rollups WHERE minute < ?"] {
+        for statement in [
+            "DELETE FROM log_rollups WHERE minute < ?",
+            "DELETE FROM perf_rollups WHERE minute < ?",
+            // Check-ins in microseconds, rollups in seconds.
+            "DELETE FROM check_ins WHERE started < ? * 1000000",
+        ] {
             let done = sqlx::query(statement)
                 .bind(before.unix_seconds())
                 .execute(self.db.pool())

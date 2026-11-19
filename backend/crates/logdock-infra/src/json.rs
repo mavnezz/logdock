@@ -15,6 +15,37 @@ pub fn to_json(value: &Value) -> Json {
     }
 }
 
+/// An event's payload as kept in its segment: JSON compressed with
+/// deflate, about a fifth of its size.
+pub fn packed(value: &Value) -> Vec<u8> {
+    packed_json(&to_json(value))
+}
+
+/// JSON compressed with deflate.
+pub fn packed_json(json: &Json) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    // Writing to a Vec cannot fail.
+    let _ = encoder.write_all(json.to_string().as_bytes());
+    encoder.finish().unwrap_or_default()
+}
+
+/// A payload from its segment; plain JSON as well, as tests write it.
+pub fn unpacked(data: &[u8]) -> Option<Value> {
+    unpacked_json(data).map(from_json)
+}
+
+/// JSON from [`packed_json`], or plain.
+pub fn unpacked_json(data: &[u8]) -> Option<Json> {
+    use std::io::Read;
+    if data.first() == Some(&b'{') {
+        return serde_json::from_slice(data).ok();
+    }
+    let mut text = String::new();
+    flate2::read::ZlibDecoder::new(data).read_to_string(&mut text).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
 pub fn from_json(json: Json) -> Value {
     match json {
         Json::Null => Value::Null,

@@ -35,6 +35,10 @@ x-laravel: &laravel
     SENTRY_SEND_DEFAULT_PII: "false"
     SENTRY_ENABLE_LOGS: "true"
     SENTRY_LOG_LEVEL: info
+    # Monitoring: every request and job as a transaction, every scheduled
+    # task as a monitor.
+    SENTRY_TRACES_SAMPLE_RATE: ${LARAVEL_TRACES_SAMPLE_RATE:-1.0}
+    SENTRY_CRONS_MONITOR_SCHEDULED_TASKS: "true"
     LOG_SERVER: dev-host
 
 services:

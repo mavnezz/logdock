@@ -140,6 +140,28 @@ impl From<logdock_projects::application::ProjectError> for ApiError {
     }
 }
 
+impl From<logdock_performance::application::PerformanceError> for ApiError {
+    fn from(error: logdock_performance::application::PerformanceError) -> Self {
+        use logdock_performance::application::PerformanceError as E;
+        match error {
+            E::Unreadable => Self::BadRequest("the transaction has no start or end".into()),
+            E::InvalidQuery(detail) => Self::BadRequest(detail.into()),
+            E::Port(e) => Self::internal(e),
+        }
+    }
+}
+
+impl From<logdock_monitors::application::MonitorError> for ApiError {
+    fn from(error: logdock_monitors::application::MonitorError) -> Self {
+        use logdock_monitors::application::MonitorError as E;
+        match error {
+            E::Unreadable => Self::BadRequest("the check-in has no monitor slug or status".into()),
+            E::NotFound => Self::NotFound,
+            E::Port(e) => Self::internal(e),
+        }
+    }
+}
+
 impl From<logdock_issues::application::IssueError> for ApiError {
     fn from(error: logdock_issues::application::IssueError) -> Self {
         use logdock_issues::application::IssueError as E;

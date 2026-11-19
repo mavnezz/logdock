@@ -4,6 +4,8 @@ use std::sync::Arc;
 use logdock_identity::application::IdentityUseCases;
 use logdock_issues::application::IssueUseCases;
 use logdock_logs::application::LogUseCases;
+use logdock_monitors::application::MonitorUseCases;
+use logdock_performance::application::PerformanceUseCases;
 use logdock_projects::application::ProjectUseCases;
 use logdock_retention::application::RetentionUseCases;
 
@@ -39,6 +41,8 @@ pub struct UseCases {
     pub identity: IdentityUseCases,
     pub issues: IssueUseCases,
     pub logs: LogUseCases,
+    pub monitors: MonitorUseCases,
+    pub performance: PerformanceUseCases,
     pub projects: ProjectUseCases,
     pub retention: RetentionUseCases,
 }
@@ -50,6 +54,8 @@ pub struct ApiState {
     pub(crate) identity: IdentityUseCases,
     pub(crate) issues: IssueUseCases,
     pub(crate) logs: LogUseCases,
+    pub(crate) monitors: MonitorUseCases,
+    pub(crate) performance: PerformanceUseCases,
     pub(crate) projects: ProjectUseCases,
     pub(crate) retention: RetentionUseCases,
     pub(crate) config: Arc<ApiConfig>,
@@ -63,6 +69,8 @@ impl ApiState {
             identity: use_cases.identity,
             issues: use_cases.issues,
             logs: use_cases.logs,
+            monitors: use_cases.monitors,
+            performance: use_cases.performance,
             projects: use_cases.projects,
             retention: use_cases.retention,
             ingest: config.ingest,

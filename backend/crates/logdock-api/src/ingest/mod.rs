@@ -20,6 +20,8 @@ use axum::routing::post;
 use logdock_issues::application::{IssueError, NotifyPolicy};
 use logdock_kernel::ProjectId;
 use logdock_logs::application::IngestError;
+use logdock_monitors::application::MonitorError;
+use logdock_performance::application::PerformanceError;
 use logdock_projects::application::IngestScope;
 use logdock_projects::domain::{Rejection, Tally};
 use logdock_sentry::{Envelope, LogItems};
@@ -236,8 +238,19 @@ async fn envelope(
     let mut tally = Tally::default();
     let mut logs = Vec::new();
     let mut events = Vec::new();
+    let mut transactions = Vec::new();
+    let mut check_ins = Vec::new();
     for item in &envelope.items {
         match item.kind.as_str() {
+            kind @ ("transaction" | "check_in") => match item.json() {
+                Ok(payload @ serde_json::Value::Object(_)) => {
+                    let environment = payload.get("environment").and_then(value::text);
+                    let list = if kind == "transaction" { &mut transactions } else { &mut check_ins };
+                    list.push((payload, environment));
+                }
+                Ok(_) => tally.reject(Rejection::Invalid, 1, format!("a {kind} is no JSON object")),
+                Err(error) => tally.reject(Rejection::Invalid, 1, format!("a {kind} is no JSON: {error}")),
+            },
             "event" => match item.json() {
                 Ok(event @ serde_json::Value::Object(_)) => {
                     let environment = event.get("environment").and_then(value::text);
@@ -260,7 +273,9 @@ async fn envelope(
     }
     let logs = own_stage(&scope, logs, &mut tally);
     let events = own_stage(&scope, events, &mut tally);
-    let items = (logs.len() + events.len()).max(1);
+    let transactions = own_stage(&scope, transactions, &mut tally);
+    let check_ins = own_stage(&scope, check_ins, &mut tally);
+    let items = (logs.len() + events.len() + transactions.len() + check_ins.len()).max(1);
     if let Err(refusal) = admit(&state, &scope, items).await {
         tally.reject(refusal.reason, items as u64, "refused before writing");
         record.execute(project, Some(scope.key), &tally).await;
@@ -303,6 +318,30 @@ async fn envelope(
                 }
                 Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
             }
+        }
+    }
+    for transaction in transactions {
+        let payload = value::value(transaction);
+        let rules = &scope.settings.redaction;
+        match state.performance.ingest.execute(scope.scope, rules, payload, envelope.sample_rate()).await {
+            Ok(_) => tally.accepted += 1,
+            Err(PerformanceError::Port(error)) => {
+                tracing::error!(%error, "cannot keep a transaction");
+                record.execute(project, Some(scope.key), &tally).await;
+                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+            }
+            Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
+        }
+    }
+    for check_in in check_ins {
+        match state.monitors.ingest.execute(scope.scope, &value::value(check_in)).await {
+            Ok(_) => tally.accepted += 1,
+            Err(MonitorError::Port(error)) => {
+                tracing::error!(%error, "cannot keep a check-in");
+                record.execute(project, Some(scope.key), &tally).await;
+                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+            }
+            Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
         }
     }
     record.execute(project, Some(scope.key), &tally).await;

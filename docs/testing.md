@@ -55,7 +55,9 @@ test app together, as `compose.dev.yaml` describes them:
 
 The script starts from nothing, sets Logdock up, creates a project, a key and
 an address to notify, starts the app with the key's DSN, calls its scenarios
-(`/scenario/log`, `/fail`, `/handled`, `/job`, a scheduler run) and checks
+(`/scenario/log`, `/fail`, `/handled`, `/job`, `/work`, `/slow`, a
+scheduler run with one task that succeeds and one that fails), with tracing
+at 100 % and every scheduled task monitored, and checks
 through Logdock's API:
 
 | Check | What it shows |
@@ -67,6 +69,9 @@ through Logdock's API:
 | the request's log entries share the error's trace | "same trace" on the issue's page |
 | a job's entries and errors say `horizon`, not `web` | per-container metadata in queued jobs |
 | the scheduler's entries say `scheduler` | |
+| requests, a failed job, a query, an outgoing request and a cache miss are measured; a slow request's p95 shows it | transactions, spans and rollups |
+| a request's trace holds the job it queued | traces across containers |
+| scheduled tasks become monitors; a failing one turns *failing* and is mailed | check-ins and monitors |
 | a new issue is mailed | notifications through SMTP |
 | ingest refused nothing, the envelopes were captured | |
 

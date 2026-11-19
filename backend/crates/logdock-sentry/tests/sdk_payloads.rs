@@ -43,3 +43,28 @@ fn reads_sentry_laravels_events() {
         assert!(event["contexts"]["trace"]["trace_id"].is_string());
     }
 }
+
+#[test]
+fn reads_sentry_laravels_transactions_and_check_ins() {
+    let request = envelope("transaction-request.envelope");
+    assert_eq!(request.sample_rate(), Some(1.0), "the rate is in the header's trace, as text");
+    let [item] = request.items.as_slice() else { panic!("one item") };
+    assert_eq!(item.kind, "transaction");
+    let transaction = item.json().unwrap();
+    assert_eq!(transaction["transaction"], "/scenario/work");
+    assert_eq!(transaction["contexts"]["trace"]["op"], "http.server");
+    let ops: Vec<&str> =
+        transaction["spans"].as_array().unwrap().iter().filter_map(|s| s["op"].as_str()).collect();
+    for op in ["db.sql.query", "cache.get", "cache.put", "http.client"] {
+        assert!(ops.contains(&op), "{op} in {ops:?}");
+    }
+    for name in ["check-in-started.envelope", "check-in-failed.envelope"] {
+        let envelope = envelope(name);
+        let [item] = envelope.items.as_slice() else { panic!("one item") };
+        assert_eq!(item.kind, "check_in");
+        let check_in = item.json().unwrap();
+        assert_eq!(check_in["monitor_slug"], "scheduled_nightly-report");
+        assert_eq!(check_in["monitor_config"]["schedule"]["value"], "* * * * *");
+        assert!(check_in["duration"].is_null(), "sentry-laravel sends no duration");
+    }
+}

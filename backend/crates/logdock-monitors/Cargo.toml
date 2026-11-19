@@ -1,0 +1,28 @@
+[package]
+name = "logdock-monitors"
+description = "Bounded context Monitors: scheduled tasks by their check-ins, their schedules, and runs that fail or do not happen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Core crate of a bounded context: no I/O, no frameworks. Adapters live in
+# logdock-infra and logdock-api. See docs/architecture.md, 9.
+[dependencies]
+logdock-kernel.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+# The lock that serializes check-ins, and sending mail without waiting.
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[features]
+# In-memory implementations of all ports, for tests.
+testing = []
+
+[lints]
+workspace = true

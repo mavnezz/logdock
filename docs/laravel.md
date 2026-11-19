@@ -111,6 +111,20 @@ The same goes on errors, as tags, in `AppServiceProvider::boot()`:
 });
 ```
 
+For monitoring (requests, jobs, queries, outgoing requests, cache and
+scheduled tasks), two more lines:
+
+```dotenv
+# The share of requests and jobs measured: 1.0 all, 0.1 one in ten.
+SENTRY_TRACES_SAMPLE_RATE=0.2
+# Every scheduled task as a monitor, with its crontab.
+SENTRY_CRONS_MONITOR_SCHEDULED_TASKS=true
+```
+
+With a rate below 1, Logdock counts each measured request as 1/rate requests,
+so counts are estimates; durations and percentiles stay real. Every measured
+request costs the SDK one more send at its end.
+
 ## 4. `config/sentry.php`
 
 The SDK waits up to 2 s to connect and 5 s in total for each send. Lower, a
@@ -168,6 +182,13 @@ services:
   before Laravel runs its terminate callbacks. The SDK therefore sends after
   the visitor has the response, but the worker is busy until the send is done
   or times out.
+- **Scheduled tasks** show up with their first run, under their name
+  (`scheduled_` dropped). The time zone is the scheduler's (`APP_TIMEZONE` or
+  `->timezone()`); Logdock reads the crontab in it, summer time included. A
+  task removed from the schedule stays until it is deleted on its page.
+- **What is measured** per request: the request itself, its SQL statements
+  (with their values replaced), outgoing HTTP requests by host, and cache
+  operations; a queued job continues the trace of the request that queued it.
 - **What is not kept** from an error event: the request body, cookies and
   environment, headers other than a few harmless ones, and the code around the
   lines of libraries (it makes up most of an event's size). Personal data is

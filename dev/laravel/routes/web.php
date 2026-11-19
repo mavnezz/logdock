@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Exceptions\PaymentFailed;
 use App\Jobs\ChargeOrder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
@@ -37,6 +40,20 @@ Route::get('/scenario/handled', function () {
     }
 
     return 'reported';
+});
+
+Route::get('/scenario/work', function () {
+    $orders = DB::select('select ? as id, ? as total', [42, 1999]);
+    $rate = Cache::remember('exchange-rate', 60, fn () => 1.08);
+    $health = Http::timeout(2)->get('http://logdock:8080/health/live')->status();
+
+    return ['orders' => count($orders), 'rate' => $rate, 'health' => $health];
+});
+
+Route::get('/scenario/slow', function () {
+    usleep(300_000);
+
+    return 'slow';
 });
 
 Route::get('/scenario/job', function () {

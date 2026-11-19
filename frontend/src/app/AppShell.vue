@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
+  Activity,
   Bug,
+  CalendarClock,
   FolderKanban,
   LogOut,
   type LucideIcon,
@@ -34,6 +36,8 @@ const icons: Record<string, LucideIcon> = {
   profile: UserRound,
   logs: ScrollText,
   issues: Bug,
+  performance: Activity,
+  monitors: CalendarClock,
 }
 
 const items = computed(() => navigation.filter((item) => !item.admin || store.isAdmin))

@@ -91,6 +91,11 @@ function show(value: unknown): string {
               :class="buttonVariants({ variant: 'outline', size: 'sm' })"
               ><Link2 />{{ t('issues.traceLogs') }}</RouterLink
             >
+            <RouterLink
+              :to="`/traces/${event.trace_id}`"
+              :class="buttonVariants({ variant: 'outline', size: 'sm' })"
+              >{{ t('issues.traceView') }}</RouterLink
+            >
           </dd>
         </template>
       </dl>

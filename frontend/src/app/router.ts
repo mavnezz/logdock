@@ -38,6 +38,21 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/features/issues/IssuePage.vue'),
         props: true,
       },
+      {
+        path: 'performance',
+        component: () => import('@/features/performance/PerformancePage.vue'),
+      },
+      {
+        path: 'traces/:id',
+        component: () => import('@/features/traces/TracePage.vue'),
+        props: true,
+      },
+      { path: 'monitors', component: () => import('@/features/monitors/MonitorsPage.vue') },
+      {
+        path: 'monitors/:id',
+        component: () => import('@/features/monitors/MonitorPage.vue'),
+        props: true,
+      },
       { path: 'projects', component: () => import('@/features/projects/ProjectsPage.vue') },
       {
         path: 'projects/:id',

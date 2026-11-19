@@ -10,15 +10,13 @@ use logdock_issues::application::ports::{EventSummary, IssueQuery, IssueSort, Is
 use logdock_issues::application::{IssueDetail, StatusChange};
 use logdock_issues::domain::{self as issues, ErrorEvent, Frame, IssueId, IssueStatus};
 use logdock_kernel::{EnvironmentId, ProjectId, Timestamp};
-use logdock_logs::domain::{LogQuery, SearchText};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use super::logs::LogEntry;
 use crate::auth::Auth;
-use crate::dto::{json, optional_time, time};
+use crate::dto::{ids, json, optional_time, time};
 use crate::error::{ApiError, Problem};
 use crate::extract::{ApiJson, ApiPath as Path, ApiQuery, Client};
 use crate::state::ApiState;
@@ -29,7 +27,6 @@ pub(crate) fn routes() -> OpenApiRouter<ApiState> {
         .routes(routes!(get_issue, change_issue, delete_issue))
         .routes(routes!(issue_events))
         .routes(routes!(get_event))
-        .routes(routes!(get_trace))
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -118,15 +115,6 @@ pub struct IssueFilters {
     pub sort: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
-}
-
-fn ids(text: &Option<String>) -> Result<Vec<i64>, ApiError> {
-    text.iter()
-        .flat_map(|t| t.split(','))
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|id| id.parse().map_err(|_| ApiError::BadRequest(format!("{id:?} is no ID"))))
-        .collect()
 }
 
 /// Issues, newest first unless sorted otherwise.
@@ -578,44 +566,5 @@ async fn get_event(
         environment_id: stored.scope.environment.get(),
         received: time(stored.received),
         event: Event::from(&stored.event),
-    }))
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct Trace {
-    pub trace_id: String,
-    /// The trace's log entries, oldest first (at most 500).
-    pub logs: Vec<LogEntry>,
-    pub events: Vec<EventListItem>,
-}
-
-/// Everything that carries one trace ID: log entries and error events.
-#[utoipa::path(
-    get,
-    path = "/traces/{trace_id}",
-    tag = "issues",
-    security(("session" = [])),
-    params(("trace_id" = String, Path)),
-    responses((status = OK, body = Trace))
-)]
-async fn get_trace(
-    auth: Auth,
-    State(state): State<ApiState>,
-    Path(trace_id): Path<String>,
-) -> Result<Json<Trace>, ApiError> {
-    auth.require(Permission::ReadData)?;
-    let query = LogQuery {
-        trace_id: Some(trace_id.clone()),
-        text: SearchText::default(),
-        limit: 500,
-        ..LogQuery::default()
-    };
-    let mut logs = state.logs.search.execute(query).await?.entries;
-    logs.reverse();
-    let events = state.issues.trace.execute(&trace_id).await?;
-    Ok(Json(Trace {
-        trace_id,
-        logs: logs.iter().map(LogEntry::from).collect(),
-        events: events.iter().map(EventListItem::from).collect(),
     }))
 }

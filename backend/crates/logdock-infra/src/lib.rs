@@ -14,6 +14,8 @@ pub mod issues;
 mod json;
 pub mod logs;
 pub mod mail;
+pub mod monitors;
+pub mod performance;
 mod random;
 pub mod segments;
 pub mod sqlite;

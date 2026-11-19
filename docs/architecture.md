@@ -43,7 +43,7 @@ while errors still go to Bugsink. The first release must therefore cover errors 
 | Release | Content |
 |---|---|
 | **R1** | logs and errors: everything needed to switch Bugsink off and stop reading log files inside containers |
-| **R2** [Later] | monitoring: requests, jobs, queries, outgoing requests, cache, scheduled tasks |
+| **R2** | monitoring: requests, jobs, queries, outgoing requests, cache, scheduled tasks (built in step 7) |
 | **R3** [Later] | forwarders for Docker's stdout/stderr and Nginx, a buffered log mode, alert rules beyond issues |
 
 ---
@@ -166,8 +166,8 @@ sentry-laravel already sends almost everything Logdock shows, over a protocol do
   |---|---|---|
   | `log` | stored as log entries. One item may hold up to 1000 entries: the protocol allows at most 100, but sentry-php 4.x sends its whole buffer in one item | |
   | `event` | stored and grouped into issues | |
-  | `transaction` | counted and dropped | stored and rolled up |
-  | `check_in` | counted and dropped | monitors |
+  | `transaction` | counted and dropped | stored with its spans and rolled up (4.3) |
+  | `check_in` | counted and dropped | monitors (4.3) |
   | anything else (`attachment`, `client_report`, `profile`, `span`, `trace_metric`, …) | counted and dropped | `client_report` shown as the SDK's own drops [Later] |
 
 - **Answer:** `200` with `{"id": "<event id>"}`. The SDK only looks at the status code.
@@ -306,16 +306,34 @@ request), request, breadcrumbs, tags and contexts, and everything else that carr
 and other error events (`GET /api/v1/traces/<trace-id>`). Resolving and muting are open to every account and recorded
 in the audit log; deleting an issue is for administrators.
 
-### 4.3 Transactions, Spans and Check-ins (R2) [Later]
+### 4.3 Transactions, Spans and Check-ins (R2)
 
-- Transactions are stored in segments. Each is a request or a job: name (route or job class), duration, status, trace
-  ID, release, service and host.
-- Spans are kept briefly (about 7 days). Rollups per minute are kept long: request count, errors and a histogram of
-  durations, for each project, environment, kind and name. Percentiles come from these histograms. Sampled data is
-  scaled up by its sample rate. [Verify] Where the payload states the rate.
-- SQL spans are grouped by their normalized statement; outgoing requests are grouped by host.
-- Check-ins become monitors per scheduled task, with the task's crontab. A run that fails, or does not happen when the
-  schedule says it should, is reported.
+Contexts `logdock-performance` and `logdock-monitors`, checked against sentry-laravel 4.30 by `just e2e`.
+
+- **Transactions** are stored with their spans in the day segments of kind `traces` (kept `LOGDOCK_RETENTION_TRACES_DAYS`,
+  7 by default), compressed. Each is a request (`http.server`), a job (`queue.process`), a command (`console.*`) or
+  something else, with its name (`GET` and the route, the job's class, the task's name), duration, status, HTTP
+  status, trace ID, release, service, host and container. The project's redaction rules apply to the whole payload,
+  spans included, since their descriptions hold URLs and statements.
+- **Rollups** per minute are kept `LOGDOCK_RETENTION_ROLLUPS_DAYS` (90): count, failures, total and longest duration
+  and a histogram of 15 buckets from 1 ms to over 30 s, for each project, stage, kind and name. Percentiles are read
+  from the histogram, interpolated within their bucket. They are added up in memory and written every 10 s.
+- **What spans are counted as:** SQL (`db.sql.*`) by the statement with its values replaced (`in (?, ?)` becomes
+  `in (...)`); outgoing requests (`http.client`) by method and host; the cache (`cache.*`) by operation and key with
+  numbers and IDs replaced, a `get` without a hit counting as a miss. Other spans (views, middleware) are kept with
+  the transaction but not rolled up.
+- **Failures:** a request with a 5xx answer; otherwise a status such as `internal_error`. A 404 is no failure.
+- **Sampling:** the SDK sends the rate in the envelope's header (`trace.sample_rate`, as text); every transaction
+  counts 1/rate times, so counts are estimates when the rate is below 1.
+- **Check-ins** make a monitor per project, stage and slug, with the task's schedule (a crontab or an interval), its
+  time zone (from the IANA database built into the binary), the margin for a late start (2 minutes unless the SDK
+  says otherwise) and the longest runtime (30 minutes). sentry-laravel sends no duration; Logdock measures from the
+  run's `in_progress` to its end.
+- **Every minute** Logdock looks for runs that should have started by their schedule and margin and did not
+  (*missed*), and runs that are still in progress after their longest runtime (*timeout*). After a pause (Logdock was
+  stopped) it catches up 100 missed runs per task and minute.
+- **Mail** goes to the project's addresses (setting "scheduled tasks that fail or do not run") when a task turns from
+  good to failing, missed or too long, and when it runs again; not for every failed run.
 
 ### 4.4 Correlation
 
@@ -513,7 +531,8 @@ These rules replace the TypeScript template with a command bus and integration e
 | `logdock-logs` | log entries: ingest rules, search, filters, correlation | kernel |
 | `logdock-issues` | error events, grouping, issues and their states, notifications to send | kernel |
 | `logdock-retention` | retention, the storage limit, segments, backups as use cases | kernel |
-| `logdock-performance`, `logdock-monitors` (R2) | transactions, spans and rollups; check-ins and missed runs | kernel |
+| `logdock-performance` | transactions, their spans, rollups of requests, jobs, commands, queries, outgoing requests and cache | kernel |
+| `logdock-monitors` | scheduled tasks by their check-ins: schedules, time zones, missed, failed and too long runs, their mail | kernel |
 | `logdock-sentry` | the wire format only: envelope parser and payload types, like `zendiloos-agent-proto` | – |
 | `logdock-infra` | the secondary adapters: sqlx repositories, segments, FTS5, migrations, mail, webhooks | kernel, contexts, sentry |
 | `logdock-api` | the primary adapter: axum routes, DTOs, OpenAPI (utoipa), authentication, SSE | kernel, contexts, sentry |

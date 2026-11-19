@@ -8,7 +8,14 @@ stored decompressed:
   `warn` with a password in its context);
 - `event-request.envelope`: the exception of `/scenario/fail`, with its
   cause, the request and two breadcrumbs;
-- `event-job.envelope`: the exception of a queued job, run by the worker.
+- `event-job.envelope`: the exception of a queued job, run by the worker;
+- `transaction-request.envelope`: `/scenario/work` with
+  `SENTRY_TRACES_SAMPLE_RATE=1.0`: spans of a query, the cache (a miss and a
+  put) and an outgoing request;
+- `transaction-job.envelope`: the failing job as a transaction, continuing
+  the trace of the request that queued it;
+- `check-in-started.envelope`, `check-in-failed.envelope`: a scheduled task
+  that failed, with `SENTRY_CRONS_MONITOR_SCHEDULED_TASKS=true`.
 
 The DSN in them belongs to a test instance that no longer exists. To renew
 them, run `just e2e` and copy from `dev/captured/`.

@@ -14,7 +14,7 @@ use sqlx::sqlite::SqliteRow;
 use sqlx::{Connection, QueryBuilder, Row, Sqlite, SqliteConnection};
 use tokio::sync::Mutex;
 
-use crate::json::{from_json, to_json};
+use crate::json::{from_json, packed, to_json, unpacked};
 use crate::segments::Segments;
 use crate::sqlite::Database;
 
@@ -28,27 +28,6 @@ fn json_text(value: &Value) -> String {
 
 fn value_of(text: &str) -> Option<Value> {
     serde_json::from_str(text).ok().map(from_json)
-}
-
-/// An event's payload as kept in its segment: JSON compressed with
-/// deflate, about a fifth of its size.
-fn packed(value: &Value) -> Vec<u8> {
-    use std::io::Write;
-    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-    // Writing to a Vec cannot fail.
-    let _ = encoder.write_all(json_text(value).as_bytes());
-    encoder.finish().unwrap_or_default()
-}
-
-/// A payload from its segment; plain JSON as well, as tests write it.
-fn unpacked(data: &[u8]) -> Option<Value> {
-    use std::io::Read;
-    if data.first() == Some(&b'{') {
-        return std::str::from_utf8(data).ok().and_then(value_of);
-    }
-    let mut text = String::new();
-    flate2::read::ZlibDecoder::new(data).read_to_string(&mut text).ok()?;
-    value_of(&text)
 }
 
 /// [`IssueRepository`] on the `issues` tables.

@@ -87,7 +87,12 @@ fn app(free: u64, web_dir: Option<std::path::PathBuf>) -> Router {
     let projects = logdock_projects::testing::TestProjects::new().use_cases;
     let logs = logdock_logs::testing::memory().0;
     let issues = logdock_issues::testing::TestIssues::new().use_cases;
-    router(ApiState::new(UseCases { identity, issues, logs, projects, retention }, config))
+    let monitors = logdock_monitors::testing::TestMonitors::new().use_cases;
+    let performance = logdock_performance::testing::TestPerformance::new().use_cases;
+    router(ApiState::new(
+        UseCases { identity, issues, logs, monitors, performance, projects, retention },
+        config,
+    ))
 }
 
 async fn get(app: &Router, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {

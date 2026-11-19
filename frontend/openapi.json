@@ -1188,6 +1188,445 @@
         ]
       }
     },
+    "/api/v1/monitors": {
+      "get": {
+        "tags": [
+          "monitors"
+        ],
+        "summary": "The scheduled tasks, those in trouble first.",
+        "operationId": "list_monitors",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Monitor"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/monitors/{id}": {
+      "get": {
+        "tags": [
+          "monitors"
+        ],
+        "summary": "One scheduled task with its latest runs.",
+        "operationId": "get_monitor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitorDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "monitors"
+        ],
+        "summary": "Forgets a scheduled task, for one that was removed from the schedule;\nits next check-in brings it back.",
+        "operationId": "delete_monitor",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/performance": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "The names of one kind over a range, where the time goes first.",
+        "operationId": "overview",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; the last 24 hours by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`total_time` (the default), `count`, `slowest` or `failures`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NamedStats"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/performance/samples": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "Requests, jobs or commands of one name, each with its trace.",
+        "operationId": "samples",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; the last 24 hours by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "As listed by the overview.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "`slowest` (the default) or `newest`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Sample"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/performance/series": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "One name over a range, in about 60 buckets.",
+        "operationId": "series",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; the last 24 hours by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "As listed by the overview.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "tags": [
@@ -1953,9 +2392,9 @@
     "/api/v1/traces/{trace_id}": {
       "get": {
         "tags": [
-          "issues"
+          "traces"
         ],
-        "summary": "Everything that carries one trace ID: log entries and error events.",
+        "summary": "Everything that carries one trace ID.",
         "operationId": "get_trace",
         "parameters": [
           {
@@ -2213,6 +2652,52 @@
           }
         },
         "additionalProperties": false
+      },
+      "CheckInDto": {
+        "type": "object",
+        "required": [
+          "check_in_id",
+          "status",
+          "started"
+        ],
+        "properties": {
+          "check_in_id": {
+            "type": "string"
+          },
+          "duration_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "finished": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started": {
+            "type": "string",
+            "description": "For a missed run, when it should have started."
+          },
+          "status": {
+            "type": "string",
+            "description": "`in_progress`, `ok`, `error`, `missed` (expected, never started) or\n`timeout` (did not finish in time)."
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "CreateAccountRequest": {
         "type": "object",
@@ -3198,6 +3683,134 @@
         },
         "additionalProperties": false
       },
+      "Monitor": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "environment_id",
+          "slug",
+          "name",
+          "health",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "health": {
+            "type": "string",
+            "description": "`new`, `ok`, `failing` or `missed`."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_check_in": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`in_progress`, `ok`, `error`, `missed` or `timeout`."
+          },
+          "margin_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "max_runtime_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "The slug without sentry-laravel's prefix."
+          },
+          "next_run": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the next run should start."
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "schedule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A crontab (`0 3 * * *`) or `every 10 minute`; `null` without one."
+          },
+          "slug": {
+            "type": "string",
+            "description": "As the SDK names it: `scheduled_nightly-report`."
+          },
+          "timezone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MonitorDetail": {
+        "type": "object",
+        "required": [
+          "monitor",
+          "check_ins"
+        ],
+        "properties": {
+          "check_ins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckInDto"
+            },
+            "description": "The latest 100, newest first."
+          },
+          "monitor": {
+            "$ref": "#/components/schemas/Monitor"
+          }
+        }
+      },
+      "NamedStats": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Stats"
+          },
+          {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "`GET /orders/{order}`, `App\\Jobs\\SendInvoice`, a normalized statement,\n`POST api.stripe.com`, `get user:<n>:cart`."
+              }
+            }
+          }
+        ]
+      },
       "PasswordRequest": {
         "type": "object",
         "required": [
@@ -3406,6 +4019,117 @@
         },
         "additionalProperties": false
       },
+      "Sample": {
+        "type": "object",
+        "required": [
+          "trace_id",
+          "project_id",
+          "environment_id",
+          "name",
+          "start",
+          "duration_ms",
+          "failed"
+        ],
+        "properties": {
+          "duration_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "http_status": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "start": {
+            "type": "string"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trace_id": {
+            "type": "string"
+          }
+        }
+      },
+      "SeriesBucket": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Stats"
+          },
+          {
+            "type": "object",
+            "required": [
+              "start"
+            ],
+            "properties": {
+              "start": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "SeriesPage": {
+        "type": "object",
+        "required": [
+          "bucket_seconds",
+          "buckets",
+          "total"
+        ],
+        "properties": {
+          "bucket_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeriesBucket"
+            },
+            "description": "Every bucket of the range, oldest first."
+          },
+          "total": {
+            "$ref": "#/components/schemas/Stats"
+          }
+        }
+      },
       "Session": {
         "type": "object",
         "required": [
@@ -3570,6 +4294,58 @@
           }
         }
       },
+      "Stats": {
+        "type": "object",
+        "description": "What a range of one name adds up to.",
+        "required": [
+          "count",
+          "flagged",
+          "total_ms",
+          "average_ms",
+          "p50_ms",
+          "p95_ms",
+          "p99_ms",
+          "max_ms"
+        ],
+        "properties": {
+          "average_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "flagged": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failed requests, jobs, commands, queries or outgoing requests; for\nthe cache, misses.",
+            "minimum": 0
+          },
+          "max_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "p50_ms": {
+            "type": "number",
+            "format": "double",
+            "description": "Estimated from a histogram of durations."
+          },
+          "p95_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "p99_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_ms": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "Storage": {
         "type": "object",
         "required": [
@@ -3689,6 +4465,7 @@
         "type": "object",
         "required": [
           "trace_id",
+          "transactions",
           "logs",
           "events"
         ],
@@ -3708,6 +4485,161 @@
           },
           "trace_id": {
             "type": "string"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceTransaction"
+            },
+            "description": "The requests, jobs and commands of the trace, oldest first; a job\ncontinues the trace of the request that queued it."
+          }
+        }
+      },
+      "TraceSpan": {
+        "type": "object",
+        "required": [
+          "span_id",
+          "op",
+          "start",
+          "duration_us",
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_us": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "op": {
+            "type": "string",
+            "description": "`db.sql.query`, `http.client`, `cache.get`, `view.render`, …"
+          },
+          "parent_span_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "span_id": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TraceTransaction": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "environment_id",
+          "span_id",
+          "kind",
+          "name",
+          "op",
+          "failed",
+          "start",
+          "duration_us",
+          "spans"
+        ],
+        "properties": {
+          "container": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_us": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "http_status": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`request`, `job`, `command` or `other`."
+          },
+          "name": {
+            "type": "string",
+            "description": "As counted: `GET /orders/{order}`."
+          },
+          "op": {
+            "type": "string"
+          },
+          "parent_span_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "span_id": {
+            "type": "string"
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceSpan"
+            },
+            "description": "Oldest first."
+          },
+          "start": {
+            "type": "string"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -3823,7 +4755,19 @@
     },
     {
       "name": "issues",
-      "description": "Error events grouped into issues, their states, and traces"
+      "description": "Error events grouped into issues and their states"
+    },
+    {
+      "name": "traces",
+      "description": "Everything that carries one trace ID"
+    },
+    {
+      "name": "performance",
+      "description": "Requests, jobs, commands, queries, outgoing requests and cache over time"
+    },
+    {
+      "name": "monitors",
+      "description": "Scheduled tasks by their check-ins"
     }
   ]
 }
