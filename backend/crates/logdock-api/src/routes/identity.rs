@@ -134,7 +134,7 @@ pub struct SetupRequest {
     responses(
         (status = OK, body = Session),
         (status = FORBIDDEN, body = Problem, description = "`invalid_setup_code`"),
-        (status = CONFLICT, body = Problem, description = "`setup_completed`"),
+        (status = CONFLICT, body = Problem, description = "`setup_completed`, `insecure_connection`"),
         (status = UNPROCESSABLE_ENTITY, body = Problem, description = "`invalid_input`"),
         (status = TOO_MANY_REQUESTS, body = Problem, description = "`too_many_attempts`"),
     )
@@ -174,6 +174,7 @@ pub struct LoginRequest {
     responses(
         (status = OK, body = Session),
         (status = UNAUTHORIZED, body = Problem, description = "`invalid_credentials`"),
+        (status = CONFLICT, body = Problem, description = "`insecure_connection`"),
         (status = TOO_MANY_REQUESTS, body = Problem, description = "`too_many_attempts`"),
     )
 )]

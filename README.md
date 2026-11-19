@@ -26,7 +26,9 @@ mkdir -p data           # owned by PUID:PGID from .env
 docker compose up -d --build
 ```
 
-Logdock listens on `127.0.0.1:8080` (`LOGDOCK_BIND`, `LOGDOCK_PORT`), behind your reverse proxy, which terminates TLS.
+Logdock listens on port 8080 of all the host's addresses (`LOGDOCK_PORT`; `LOGDOCK_BIND=127.0.0.1` for a reverse proxy
+on the same host only). Behind a proxy that terminates TLS, `LOGDOCK_PUBLIC_URL` is its `https://` address; reached
+directly over plain HTTP, it is `http://<host>:8080`, see [docs/operations.md](docs/operations.md#reached-directly).
 `GET /health/ready` tells whether it can take data.
 
 ## Development

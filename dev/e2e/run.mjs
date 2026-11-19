@@ -10,6 +10,7 @@
 
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { networkInterfaces } from 'node:os'
 import { join } from 'node:path'
 
 const root = new URL('../..', import.meta.url).pathname
@@ -368,6 +369,17 @@ if (!keep) {
   }
   compose(['down', '--volumes', '--remove-orphans'])
 } else {
-  console.log(`Logdock: ${LOGDOCK} (dev@logdock.test / logdock-dev-password)`)
+  // The host's own addresses, without Docker's networks.
+  const addresses = process.env.DEV_BIND
+    ? []
+    : Object.entries(networkInterfaces())
+        .filter(([name]) => !/^(docker|br-|veth)/.test(name))
+        .flatMap(([, list]) => list ?? [])
+        .filter((address) => address.family === 'IPv4' && !address.internal)
+        .map((address) => address.address)
+  const on = (url) => [url, ...addresses.map((address) => url.replace('localhost', address))].join(', ')
+  console.log(`Logdock: ${on(LOGDOCK)} (dev@logdock.test / logdock-dev-password)`)
+  console.log(`Laravel: ${on(LARAVEL)}`)
+  console.log(`Mailpit: ${on(MAILPIT)}`)
 }
 process.exit(crashed || results.some((r) => !r.ok) ? 1 : 0)

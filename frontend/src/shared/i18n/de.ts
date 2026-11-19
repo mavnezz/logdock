@@ -436,6 +436,8 @@ const de: Messages = {
     mail_not_configured: 'Kein Mailserver eingerichtet: Setze LOGDOCK_SMTP_URL.',
     no_recipients: 'Das Projekt hat noch keine Adressen für Benachrichtigungen.',
     mail_failed: 'Die E-Mail konnte nicht gesendet werden.',
+    insecure_connection:
+      'Die Anmeldung braucht hier HTTPS, weil Logdock sichere Cookies setzt. Nutze HTTPS oder setze LOGDOCK_PUBLIC_URL auf diese http://-Adresse.',
     csrf_rejected: 'Die Anfrage wurde abgewiesen. Lade die Seite neu.',
     forbidden: 'Das darfst du nicht.',
     not_found: 'Das gibt es nicht (mehr).',

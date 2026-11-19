@@ -84,7 +84,8 @@ through Logdock's API:
 
 `just e2e --keep` (or `just dev-stack`) leaves it all running: Logdock on
 http://localhost:18480 (`dev@logdock.test`, `logdock-dev-password`), the app on
-http://localhost:18400 and Mailpit on http://localhost:18425.
+http://localhost:18400 and Mailpit on http://localhost:18425, also on the
+host's other addresses (`DEV_BIND=127.0.0.1` keeps them on the host).
 
 What the SDK sent is kept as fixtures in
 `backend/crates/logdock-sentry/tests/fixtures/`; the parser's tests and the

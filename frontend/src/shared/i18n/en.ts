@@ -428,6 +428,8 @@ const en = {
     mail_not_configured: 'No mail server is configured: set LOGDOCK_SMTP_URL.',
     no_recipients: 'The project has no addresses to notify yet.',
     mail_failed: 'The e-mail could not be sent.',
+    insecure_connection:
+      'Signing in needs HTTPS here, as Logdock sets secure cookies. Use HTTPS, or set LOGDOCK_PUBLIC_URL to this http:// address.',
     csrf_rejected: 'The request was refused. Reload the page.',
     forbidden: 'You may not do this.',
     not_found: 'This does not exist (any more).',

@@ -7,7 +7,7 @@
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
-use axum::http::{HeaderMap, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use logdock_identity::application::{AuthContext, SignedIn};
@@ -66,6 +66,38 @@ pub(crate) fn check_same_origin(headers: &HeaderMap) -> Result<(), ApiError> {
     Ok(())
 }
 
+/// Refuses a sign-in whose session cookie the browser would drop: a `Secure`
+/// cookie set over plain HTTP, from anywhere but a loopback address. The
+/// sign-in would seem to work and the next request would find no session.
+pub(crate) fn check_cookie_kept(headers: &HeaderMap, secure: bool) -> Result<(), ApiError> {
+    let origin = headers.get(header::ORIGIN).and_then(|value| value.to_str().ok());
+    match origin.and_then(|origin| origin.strip_prefix("http://")) {
+        Some(host) if secure && !is_loopback(host) => Err(ApiError::Rejected {
+            status: StatusCode::CONFLICT,
+            code: "insecure_connection",
+            detail: Some(
+                "Logdock sets secure cookies, which browsers keep over HTTPS only. Reach it over HTTPS, \
+                 or set LOGDOCK_PUBLIC_URL to its http:// address."
+                    .into(),
+            ),
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// `localhost`, a name under it, or a loopback address, with or without a
+/// port: browsers keep secure cookies from these over plain HTTP too.
+fn is_loopback(authority: &str) -> bool {
+    let host = match authority.strip_prefix('[') {
+        Some(rest) => rest.split_once(']').map_or(rest, |(host, _)| host),
+        None => authority.split_once(':').map_or(authority, |(host, _)| host),
+    };
+    let host = host.to_ascii_lowercase();
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
 /// The session token from the request's cookie, if any.
 pub(crate) fn session_token(headers: &HeaderMap, secure: bool) -> Option<Secret> {
     CookieJar::from_headers(headers).get(cookie_name(secure)).map(|cookie| Secret::new(cookie.value()))
@@ -103,14 +135,17 @@ impl FromRequestParts<ApiState> for Auth {
     }
 }
 
-/// Requests that sign someone in must come from our own pages.
+/// Requests that sign someone in must come from our own pages, over a
+/// connection the session cookie survives.
 pub struct SameOrigin;
 
-impl<S: Send + Sync> FromRequestParts<S> for SameOrigin {
+impl FromRequestParts<ApiState> for SameOrigin {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        check_same_origin(&parts.headers).map(|()| Self)
+    async fn from_request_parts(parts: &mut Parts, state: &ApiState) -> Result<Self, Self::Rejection> {
+        check_same_origin(&parts.headers)?;
+        check_cookie_kept(&parts.headers, state.config.secure_cookies)?;
+        Ok(Self)
     }
 }
 
@@ -144,6 +179,26 @@ mod tests {
         ]);
         assert!(check_same_origin(&forwarded).is_ok());
         assert!(check_same_origin(&headers(&[("origin", "null"), ("host", "x")])).is_err());
+    }
+
+    #[test]
+    fn refuses_a_sign_in_whose_secure_cookie_the_browser_would_drop() {
+        let from = |origin| headers(&[("origin", origin)]);
+        let refused = check_cookie_kept(&from("http://192.168.1.20:8080"), true).unwrap_err();
+        assert!(matches!(refused, ApiError::Rejected { code: "insecure_connection", .. }));
+        assert!(check_cookie_kept(&from("http://logs.example.com"), true).is_err());
+        assert!(check_cookie_kept(&from("http://192.168.1.20:8080"), false).is_ok());
+        for kept in [
+            "https://logs.example.com",
+            "http://localhost:18480",
+            "http://LOCALHOST",
+            "http://logdock.localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://[::1]:8080",
+        ] {
+            assert!(check_cookie_kept(&from(kept), true).is_ok(), "{kept}");
+        }
+        assert!(check_cookie_kept(&headers(&[]), true).is_ok());
     }
 
     #[test]

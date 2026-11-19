@@ -63,7 +63,7 @@ services:
       LOGDOCK_LOG_FORMAT: text
       LOGDOCK_MIN_FREE_DISK: 100MiB
     ports:
-      - "127.0.0.1:18480:8080"
+      - "${DEV_BIND:+${DEV_BIND}:}18480:8080"
     volumes:
       - ./dev/data/logdock:/data
 
@@ -83,7 +83,7 @@ services:
     image: axllent/mailpit:v1.32
     restart: unless-stopped
     ports:
-      - "127.0.0.1:18425:8025"
+      - "${DEV_BIND:+${DEV_BIND}:}18425:8025"
 
   migrate:
     <<: *laravel
@@ -96,7 +96,7 @@ services:
       <<: *laravel-env
       LOG_SERVICE: web
     ports:
-      - "127.0.0.1:18400:8000"
+      - "${DEV_BIND:+${DEV_BIND}:}18400:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -139,7 +139,7 @@ services:
     volumes:
       - ./dev/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
-      - "127.0.0.1:18401:80"
+      - "${DEV_BIND:+${DEV_BIND}:}18401:80"
     depends_on:
       - web
 

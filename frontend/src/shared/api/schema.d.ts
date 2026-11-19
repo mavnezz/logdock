@@ -1538,6 +1538,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `insecure_connection` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `too_many_attempts` */
             429: {
                 headers: {
@@ -2665,7 +2674,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `setup_completed` */
+            /** @description `setup_completed`, `insecure_connection` */
             409: {
                 headers: {
                     [name: string]: unknown;

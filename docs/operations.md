@@ -21,6 +21,17 @@ answers 503 with its reasons when the database does not answer, free disk is
 below `LOGDOCK_MIN_FREE_DISK` or a writer stalled. The image's `HEALTHCHECK`
 asks `/health/live`.
 
+## Reached directly
+
+Compose publishes port 8080 (`LOGDOCK_PORT`) on all the host's addresses;
+`LOGDOCK_BIND=127.0.0.1` limits it to a proxy on the same host.
+
+Reached without a proxy, over plain HTTP, `LOGDOCK_PUBLIC_URL` is that
+`http://` address (`http://docker-host:8080`). With `https://` or none,
+Logdock sets secure cookies, which browsers keep over HTTPS only (and from
+`localhost`): the setup and sign-in then answer `insecure_connection`
+instead of a session the browser would drop.
+
 ## Behind the reverse proxy
 
 Logdock speaks plain HTTP on one port; the proxy terminates TLS. It needs:

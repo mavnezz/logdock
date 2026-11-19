@@ -3,7 +3,8 @@
 
 mod common;
 
-use axum::http::{Method, StatusCode};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
 use common::{Browser, PASSWORD, TestApp};
 use serde_json::json;
 
@@ -67,6 +68,41 @@ async fn signs_in_and_out_with_cookie_and_csrf_token() {
     let logout = ada.send(Method::POST, "/api/v1/auth/logout", None).await;
     assert_eq!(logout.status, StatusCode::NO_CONTENT);
     assert_eq!(ada.get("/api/v1/auth/session").await.status, StatusCode::UNAUTHORIZED);
+    app.stop().await;
+}
+
+#[tokio::test]
+async fn refuses_to_sign_in_over_plain_http_with_secure_cookies() {
+    let app = TestApp::start_with(&[("LOGDOCK_PUBLIC_URL", "https://logdock.test")]).await;
+    let sign_in = |origin: &'static str| {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/setup")
+            .header(header::HOST, "logdock.test")
+            .header(header::ORIGIN, origin)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                json!({"code": common::SETUP_CODE, "email": "ada@example.com", "name": "Ada", "password": PASSWORD})
+                    .to_string(),
+            ))
+            .unwrap();
+        app.request(request)
+    };
+
+    // The browser would drop the secure cookie: the setup is refused and
+    // can be done once the address is right.
+    let refused = sign_in("http://logdock.test").await;
+    assert_eq!(
+        (refused.status, refused.json()["code"].as_str()),
+        (StatusCode::CONFLICT, Some("insecure_connection"))
+    );
+    assert!(refused.headers.get(header::SET_COOKIE).is_none());
+    assert_eq!(app.get("/api/v1/setup").await.json()["needed"], true);
+
+    let done = sign_in("https://logdock.test").await;
+    assert_eq!(done.status, StatusCode::OK, "{}", done.text());
+    let cookie = done.headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(cookie.starts_with("__Host-logdock_session=") && cookie.contains("Secure"), "{cookie}");
     app.stop().await;
 }
 

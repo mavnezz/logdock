@@ -18,7 +18,7 @@ services:
       - path: .env
         required: false
     ports:
-      - "${LOGDOCK_BIND:-127.0.0.1}:${LOGDOCK_PORT:-8080}:8080"
+      - "${LOGDOCK_BIND:+${LOGDOCK_BIND}:}${LOGDOCK_PORT:-8080}:8080"
     volumes:
       - "${LOGDOCK_DATA:-./data}:/data"
     # Longer than LOGDOCK_SHUTDOWN_TIMEOUT, so the queue is drained.

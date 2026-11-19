@@ -362,6 +362,16 @@
               }
             }
           },
+          "409": {
+            "description": "`insecure_connection`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`too_many_attempts`",
             "content": {
@@ -2307,7 +2317,7 @@
             }
           },
           "409": {
-            "description": "`setup_completed`",
+            "description": "`setup_completed`, `insecure_connection`",
             "content": {
               "application/json": {
                 "schema": {
