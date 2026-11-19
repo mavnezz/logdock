@@ -139,7 +139,7 @@ impl ProjectRepository for SqliteProjects {
         environments: &[EnvironmentName],
         at: Timestamp,
     ) -> Result<Option<Project>, PortError> {
-        let mut tx = self.db.pool().begin().await.map_err(port)?;
+        let mut tx = self.db.write().await.map_err(port)?;
         let settings = serde_json::to_string(&SettingsJson::default()).map_err(port)?;
         let id: Option<i64> = sqlx::query_scalar(
             "INSERT INTO projects (name, settings, created_at) VALUES (?, ?, ?) ON CONFLICT (name) DO NOTHING RETURNING id",
@@ -189,7 +189,7 @@ impl ProjectRepository for SqliteProjects {
     }
 
     async fn delete(&self, id: ProjectId) -> Result<(), PortError> {
-        let mut tx = self.db.pool().begin().await.map_err(port)?;
+        let mut tx = self.db.write().await.map_err(port)?;
         // What the segments' writers count is kept beside them, without a
         // foreign key: it goes with the project here.
         for statement in [

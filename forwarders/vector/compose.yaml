@@ -1,0 +1,32 @@
+# Vector next to an app's containers, for one stage (docs/forwarders.md).
+# Add it to the app's compose file, or start it beside it with the same
+# project name:
+#
+#   docker compose -p orders-production -f compose.yaml -f forwarders/vector/compose.yaml up -d
+#
+# Containers whose output Logdock should get carry the label
+# `logdock.forward: "true"`. Laravel's JSON log files are read from the
+# volume `laravel-logs`, which the app mounts at storage/logs.
+services:
+  vector:
+    image: timberio/vector:0.62.0-alpine
+    restart: unless-stopped
+    environment:
+      # Vector reads ${...} in its configuration only when allowed to; the
+      # configuration is this repository's, no event data is interpolated.
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
+      LOGDOCK_URL: ${LOGDOCK_URL:?the address of Logdock, e.g. https://logdock.example.com}
+      LOGDOCK_KEY: ${LOGDOCK_FORWARDER_KEY:?an ingest key of this stage}
+      LOGDOCK_STACK: ${COMPOSE_PROJECT_NAME:?the compose project name}
+      LOGDOCK_HOST: ${LOGDOCK_HOST:-docker-host}
+      LARAVEL_LOGS: /laravel-logs
+    volumes:
+      - ./forwarders/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      # Reads the containers' output through the Docker API.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - laravel-logs:/laravel-logs:ro
+      - vector-data:/var/lib/vector
+
+volumes:
+  laravel-logs:
+  vector-data:

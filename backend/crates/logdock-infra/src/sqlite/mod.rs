@@ -142,6 +142,14 @@ impl Database {
         &self.pool
     }
 
+    /// A transaction that takes the write lock at its start. A deferred one
+    /// that reads before it writes fails at once with `SQLITE_BUSY` when
+    /// another connection wrote meanwhile (WAL mode does not wait then);
+    /// this one waits for the lock as long as the busy timeout allows.
+    pub async fn write(&self) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>, sqlx::Error> {
+        self.pool.begin_with("BEGIN IMMEDIATE").await
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }

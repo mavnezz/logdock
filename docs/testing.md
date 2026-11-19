@@ -51,7 +51,11 @@ test app together, as `compose.dev.yaml` describes them:
   [laravel.md](laravel.md) says) as `web`, `worker` (`queue:work`, named
   `horizon`) and `scheduler`, sharing a SQLite database;
 - `capture` between the app and Logdock, which keeps what the SDK sent in
-  `dev/captured/`.
+  `dev/captured/`;
+- Nginx in front of the app, Vector (`forwarders/vector`) reading Nginx's
+  output and the app's JSON log file, and Fluent Bit (`forwarders/fluent-bit`)
+  getting the worker's output through Docker's fluentd logging driver, each
+  with a key of its own.
 
 The script starts from nothing, sets Logdock up, creates a project, a key and
 an address to notify, starts the app with the key's DSN, calls its scenarios
@@ -72,6 +76,9 @@ through Logdock's API:
 | requests, a failed job, a query, an outgoing request and a cache miss are measured; a slow request's p95 shows it | transactions, spans and rollups |
 | a request's trace holds the job it queued | traces across containers |
 | scheduled tasks become monitors; a failing one turns *failing* and is mailed | check-ins and monitors |
+| Nginx's access log arrives through Vector with method, path and status; a 404 is a warning | Vector's Docker source and its parsing |
+| a line of Laravel's JSON log file arrives through Vector | the buffered mode |
+| `queue:work`'s output arrives through Fluent Bit and Docker's fluentd driver | Fluent Bit |
 | a new issue is mailed | notifications through SMTP |
 | ingest refused nothing, the envelopes were captured | |
 

@@ -151,6 +151,18 @@ return [
             'tap' => [App\Logging\ContainerMetadata::class],
         ],
 
+        // Buffered mode (docs/forwarders.md): Monolog's JSON lines in daily
+        // files, which Vector or Fluent Bit ship to Logdock.
+        'json' => [
+            'driver' => 'daily',
+            'path' => env('LOG_JSON_PATH', storage_path('logs/laravel.json')),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 3,
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+            'replace_placeholders' => true,
+            'tap' => [App\Logging\ContainerMetadata::class],
+        ],
+
         'null' => [
             'driver' => 'monolog',
             'handler' => NullHandler::class,

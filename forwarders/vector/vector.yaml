@@ -1,0 +1,118 @@
+# Vector for one app and stage (docs/forwarders.md): the stdout and stderr of
+# the containers of its compose project that carry the label
+# `logdock.forward=true`, Nginx's access and error log parsed, and Laravel's
+# JSON log files (buffered mode), to Logdock's NDJSON endpoint. Its key
+# decides the project and stage of everything it sends.
+#
+# Environment:
+#   LOGDOCK_URL    https://logdock.example.com
+#   LOGDOCK_KEY    an ingest key of the app's stage
+#   LOGDOCK_STACK  the compose project whose containers it reads
+#   LOGDOCK_HOST   the Docker host's name, for the entries' host
+#   LARAVEL_LOGS   where Laravel's JSON log files are mounted (/laravel-logs)
+
+data_dir: /var/lib/vector
+
+sources:
+  containers:
+    type: docker_logs
+    include_labels:
+      - "com.docker.compose.project=${LOGDOCK_STACK}"
+      - "logdock.forward=true"
+
+  # Buffered mode: Monolog's JSON lines, from the files the `json` channel
+  # writes. Vector keeps how far it read in its data_dir.
+  laravel_files:
+    type: file
+    include:
+      - "${LARAVEL_LOGS:-/laravel-logs}/*.json"
+    read_from: beginning
+    ignore_older_secs: 172800
+
+transforms:
+  container_lines:
+    type: remap
+    inputs: [containers]
+    source: |
+      line = strip_whitespace(string(.message) ?? "")
+      service = string(.label."com.docker.compose.service") ?? "unknown"
+      level = "info"
+      if .stream == "stderr" { level = "error" }
+      out = {
+        "timestamp": .timestamp,
+        "message": line,
+        "service": service,
+        "container": string(.container_name) ?? null,
+        "host": "${LOGDOCK_HOST:-unknown}",
+        "level": level,
+        "attributes": {"stream": .stream, "image": .image}
+      }
+      json, json_error = parse_json(line)
+      access, access_error = parse_nginx_log(line, "combined")
+      problem, problem_error = parse_nginx_log(line, "error")
+      if json_error == null && is_object(json) {
+        # A Monolog JSON line: its own fields win.
+        out = merge(out, object!(json))
+      } else if access_error == null {
+        status = to_int(access.status)
+        # "GET /orders/42?page=2 HTTP/1.1"
+        request = split(string(access.request) ?? "", " ")
+        method = string(request[0]) ?? "-"
+        path = string(request[1]) ?? "-"
+        out.message = join!([method, path, to_string(status)], " ")
+        out.level = "info"
+        if status >= 400 { out.level = "warn" }
+        if status >= 500 { out.level = "error" }
+        out.attributes = merge(object!(out.attributes), {
+          "status": status,
+          "method": method,
+          "path": path,
+          "client": access.client,
+          "size": access.size,
+          "referer": access.referer,
+          "agent": access.agent
+        })
+      } else if problem_error == null {
+        severity = string(problem.severity) ?? "error"
+        out.message = string(problem.message) ?? line
+        out.level = severity
+        if includes(["emerg", "alert", "crit"], severity) { out.level = "fatal" }
+        out.attributes = merge(object!(out.attributes), {"client": problem.client, "request": problem.request})
+      }
+      . = out
+
+  laravel_lines:
+    type: remap
+    inputs: [laravel_files]
+    drop_on_error: true
+    source: |
+      . = object!(parse_json!(string!(.message)))
+
+sinks:
+  logdock:
+    type: http
+    inputs: [container_lines, laravel_lines]
+    uri: "${LOGDOCK_URL}/api/v1/ingest/logs"
+    method: post
+    compression: gzip
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    auth:
+      strategy: bearer
+      token: "${LOGDOCK_KEY}"
+    request:
+      headers:
+        Content-Type: application/x-ndjson
+    batch:
+      max_events: 1000
+      timeout_secs: 2
+    # Kept on disk while Logdock is away; Vector retries 408, 429 and 5xx.
+    # 256 MiB is the smallest disk buffer Vector takes.
+    buffer:
+      type: disk
+      max_size: 268435488
+      when_full: block
+    healthcheck:
+      enabled: false

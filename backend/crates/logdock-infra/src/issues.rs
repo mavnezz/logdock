@@ -224,7 +224,7 @@ impl IssueRepository for SqliteIssues {
     }
 
     async fn record(&self, id: IssueId, at: Timestamp, release: Option<&str>) -> Result<(), PortError> {
-        let mut tx = self.db.pool().begin().await.map_err(port)?;
+        let mut tx = self.db.write().await.map_err(port)?;
         sqlx::query(
             "INSERT INTO issue_hours (issue_id, hour, count) VALUES (?, ?, 1) \
              ON CONFLICT (issue_id, hour) DO UPDATE SET count = count + 1",

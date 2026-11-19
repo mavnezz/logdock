@@ -43,14 +43,27 @@ impl SqliteRollups {
         Self { db, pending: std::sync::Mutex::new(HashMap::new()) }
     }
 
-    /// Writes what was added since the last flush.
+    /// Writes what was added since the last flush; what it could not write
+    /// is kept for the next one.
     pub async fn flush(&self) -> Result<(), PortError> {
         let pending = std::mem::take(&mut *self.pending.lock().unwrap_or_else(|e| e.into_inner()));
         if pending.is_empty() {
             return Ok(());
         }
-        let mut tx = self.db.pool().begin().await.map_err(port)?;
+        let result = self.write(&pending).await;
+        if result.is_err() {
+            let mut kept = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+            for (key, rollup) in pending {
+                kept.entry(key).or_default().merge(&rollup);
+            }
+        }
+        result
+    }
+
+    async fn write(&self, pending: &HashMap<Key, Rollup>) -> Result<(), PortError> {
+        let mut tx = self.db.write().await.map_err(port)?;
         for ((kind, minute, project, environment, name), r) in pending {
+            let (kind, minute, project, environment) = (*kind, *minute, *project, *environment);
             let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new(concat!(
                 "INSERT INTO perf_rollups (kind, minute, project_id, environment_id, name, count, flagged, ",
                 "total_us, max_us, b0, b1, b2, b3, b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14) VALUES ("
@@ -60,7 +73,7 @@ impl SqliteRollups {
             values.push_bind(minute);
             values.push_bind(project);
             values.push_bind(environment);
-            values.push_bind(name);
+            values.push_bind(name.clone());
             values.push_bind(r.count as i64);
             values.push_bind(r.flagged as i64);
             values.push_bind(r.total_us.min(i64::MAX as u64) as i64);

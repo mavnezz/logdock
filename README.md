@@ -8,12 +8,15 @@ sends to Logdock, and one web interface searches across all of them.
 - **Logs:** Laravel's logs from all apps, containers and stages, with full-text search, filters and a live view.
 - **Errors:** exceptions grouped into issues, with their state across releases and e-mail on new and returning ones.
 - **Monitoring:** requests, jobs, queries, outgoing requests, cache and scheduled tasks.
+- **Other logs:** Nginx's and other containers' output through Vector or Fluent Bit, and a buffered mode for Laravel's
+  logs.
 
 The apps keep using the Sentry SDK they already have; only the DSN points to Logdock.
-[docs/laravel.md](docs/laravel.md) shows how an app is set up, [docs/architecture.md](docs/architecture.md) explains
-how and why.
+[docs/laravel.md](docs/laravel.md) shows how an app is set up, [docs/forwarders.md](docs/forwarders.md) how Nginx's
+and other containers' output gets there too, [docs/architecture.md](docs/architecture.md) explains how and why.
 
-> **Status:** under construction, step by step along the plan in [docs/architecture.md](docs/architecture.md), 12.
+> **Status:** all steps of the plan in [docs/architecture.md](docs/architecture.md), 12, are built and checked against a
+> Laravel test app; the trial with a real app on a stage is next.
 
 ## Quick start
 
@@ -45,4 +48,5 @@ just e2e           # Logdock and a Laravel test app in Docker, checked end to en
 | `frontend/` | Vue 3 interface |
 | `docker/Dockerfile`, `compose.yaml` | the image and how it runs |
 | `dev/laravel`, `dev/e2e`, `compose.dev.yaml` | the Laravel test app and the end-to-end check |
+| `forwarders/` | Vector and Fluent Bit for containers' output and the buffered mode |
 | `docs/` | architecture, Laravel setup, testing, operations |

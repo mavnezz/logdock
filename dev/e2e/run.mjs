@@ -17,6 +17,7 @@ const keep = process.argv.includes('--keep')
 const LOGDOCK = 'http://localhost:18480'
 const LARAVEL = 'http://localhost:18400'
 const MAILPIT = 'http://localhost:18425'
+const NGINX = 'http://localhost:18401'
 const PROJECT = 'orders-test'
 
 function compose(args, env = {}) {
@@ -118,9 +119,22 @@ async function main() {
     settings: { ...project.settings, notify: ['ops@logdock.test'] },
   })
   const dsn = `http://${key.secret}@capture:8081/${project.id}`
+  const forwarderKey = async (label) =>
+    (
+      await logdock.call('POST', `/api/v1/projects/${project.id}/keys`, {
+        environment_id: production.id,
+        label,
+      })
+    ).secret
+  const vectorKey = await forwarderKey('vector')
+  const fluentKey = await forwarderKey('fluent-bit')
 
   console.log('» starting the Laravel app')
-  compose(['up', '--detach', '--build', 'web', 'worker', 'scheduler'], { LARAVEL_DSN: dsn })
+  compose(['up', '--detach', '--build', 'fluent-bit', 'web', 'worker', 'scheduler', 'nginx', 'vector'], {
+    LARAVEL_DSN: dsn,
+    LOGDOCK_VECTOR_KEY: vectorKey,
+    LOGDOCK_FLUENT_KEY: fluentKey,
+  })
   await eventually('Laravel up', async () => (await fetch(`${LARAVEL}/up`)).ok, 90)
 
   console.log('» running the scenarios')
@@ -134,6 +148,17 @@ async function main() {
   await scenario('job')
   await scenario('work')
   await scenario('slow')
+  // Through Nginx, for the forwarders.
+  for (const [path, status] of [
+    ['/scenario/buffered', 200],
+    ['/missing', 404],
+  ]) {
+    const response = await eventually(`Nginx answers ${path}`, async () => {
+      const answer = await fetch(NGINX + path)
+      return answer.status === status && answer
+    })
+    expect(response.status === status, `${path} through Nginx answered ${response.status}`)
+  }
   compose(['exec', '-T', 'scheduler', 'php', 'artisan', 'schedule:run'])
 
   console.log('» checking what arrived')
@@ -267,11 +292,53 @@ async function main() {
     })
     return mail.Subject
   })
+  const viaKey = async (label) => {
+    const keys = await logdock.get(`/api/v1/projects/${project.id}/keys`)
+    const id = keys.find((k) => k.label === label).id
+    const counts = await logdock.get(`/api/v1/projects/${project.id}/ingest`)
+    return counts.filter((c) => c.key_id === id).reduce((sum, c) => sum + c.accepted, 0)
+  }
+  await check('Nginx’s access log arrives parsed, through Vector', async () => {
+    const ok = await eventually('the access line', async () => {
+      const page = await logdock.get(`/api/v1/logs?project=${project.id}&service=nginx&q=buffered&from=2000-01-01T00:00:00Z`)
+      return page.entries[0]
+    }, 60)
+    expect(ok.message === 'GET /scenario/buffered 200', `message ${JSON.stringify(ok.message)}`)
+    expect(ok.attributes.status === 200 && ok.level === 'info', `${ok.level} ${JSON.stringify(ok.attributes)}`)
+    expect(ok.host === 'dev-host', `host ${ok.host}`)
+    const missing = await eventually('the 404', async () => {
+      const page = await logdock.get(`/api/v1/logs?project=${project.id}&service=nginx&q=missing&from=2000-01-01T00:00:00Z`)
+      return page.entries[0]
+    })
+    expect(missing.level === 'warn', `a 404 is ${missing.level}`)
+    return `container ${ok.container}`
+  })
+  await check('buffered mode: Laravel’s JSON log file arrives through Vector', async () => {
+    const line = await entry('written to a file')
+    expect(line.message === 'Buffered line 7 written to a file', `message ${JSON.stringify(line.message)}`)
+    expect(line.level === 'warn' && line.service === 'web', `${line.level} ${line.service}`)
+    expect(line.attributes.channel === 'production', `attributes ${JSON.stringify(line.attributes)}`)
+    const sent = await viaKey('vector')
+    expect(sent >= 3, `only ${sent} entries counted for Vector's key`)
+    return `${sent} entries with Vector's key`
+  })
+  await check('the worker’s output arrives through Fluent Bit and the fluentd driver', async () => {
+    const line = await eventually('a queue:work line', async () => {
+      const page = await logdock.get(`/api/v1/logs?project=${project.id}&service=worker&q=ChargeOrder&from=2000-01-01T00:00:00Z`)
+      return page.entries[0]
+    }, 60)
+    expect(line.attributes.stream === 'stdout', `attributes ${JSON.stringify(line.attributes)}`)
+    expect(line.host === 'dev-host', `host ${line.host}`)
+    const sent = await viaKey('fluent-bit')
+    expect(sent >= 1, `no entries counted for Fluent Bit's key`)
+    return `${JSON.stringify(line.message)}; ${sent} entries with Fluent Bit's key`
+  })
   await check('ingest refused nothing', async () => {
     const counts = await logdock.get(`/api/v1/projects/${project.id}/ingest`)
     const refused = counts.filter((c) => Object.keys(c.rejected).length > 0)
     expect(refused.length === 0, JSON.stringify(refused))
     const accepted = counts.reduce((sum, c) => sum + c.accepted, 0)
+    expect(accepted >= 20, `only ${accepted} items counted as accepted`)
     const skipped = counts.reduce((sum, c) => sum + c.skipped, 0)
     return `${accepted} accepted, ${skipped} skipped`
   })

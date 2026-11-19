@@ -1,5 +1,7 @@
-//! Lines of the NDJSON endpoint: Logdock's own shape, or Monolog's
-//! `JsonFormatter` (docs/architecture.md, 3.3).
+//! Lines of the NDJSON endpoint: Logdock's own shape, Monolog's
+//! `JsonFormatter` (docs/architecture.md, 3.3), and what forwarders name
+//! their fields (docs/forwarders.md): `log` or `msg` for the message, `date`,
+//! `time` or `@timestamp` for the time, `severity` for the level.
 
 use logdock_logs::domain::{Level, NewLogEntry};
 use serde_json::{Map, Value as Json};
@@ -10,9 +12,16 @@ use super::value::{text, timestamp, value};
 /// JSON object with a message.
 pub(crate) fn entry(line: &[u8]) -> Option<(NewLogEntry, Option<String>)> {
     let Json::Object(mut map) = serde_json::from_slice::<Json>(line).ok()? else { return None };
-    let message = map.remove("message").as_ref().and_then(text)?;
-    let time = map.remove("timestamp").or_else(|| map.remove("datetime")).as_ref().and_then(timestamp);
-    let level = match (map.remove("level"), map.remove("level_name")) {
+    let message = ["message", "msg", "log"]
+        .iter()
+        .find_map(|key| map.remove(*key).as_ref().and_then(text))
+        // A container's line keeps its newline.
+        .map(|m| m.trim_end_matches(['\n', '\r']).to_owned())
+        .filter(|m| !m.is_empty())?;
+    let time = ["timestamp", "datetime", "@timestamp", "time", "date"]
+        .iter()
+        .find_map(|key| map.remove(*key).as_ref().and_then(timestamp));
+    let level = match (map.remove("level"), map.remove("level_name").or_else(|| map.remove("severity"))) {
         (Some(Json::Number(n)), _) => n.as_i64().and_then(Level::from_monolog),
         (Some(Json::String(name)), _) | (_, Some(Json::String(name))) => Level::parse(&name),
         _ => None,
@@ -43,6 +52,10 @@ pub(crate) fn entry(line: &[u8]) -> Option<(NewLogEntry, Option<String>)> {
     let mut entry = entry;
     if let Some(channel) = map.remove("channel").as_ref().and_then(text) {
         attributes.insert("channel".to_owned(), Json::String(channel));
+    }
+    // What else a forwarder put on the line: `stream`, `container_name`, …
+    for (key, value) in map {
+        attributes.entry(key).or_insert(value);
     }
     entry.attributes = attributes.into_iter().map(|(k, v)| (k, value(v))).collect();
     Some((entry, environment))
@@ -84,6 +97,22 @@ mod tests {
 
     fn entry_level(line: &[u8]) -> Option<Level> {
         entry(line).unwrap().0.level
+    }
+
+    #[test]
+    fn reads_what_forwarders_send() {
+        // Fluent Bit's http output with json_lines: `date` in seconds.
+        let fluent = br#"{"date":1794993302.5,"log":"GET / HTTP/1.1\n","stream":"stdout","container_name":"/orders-nginx-1"}"#;
+        let (line, _) = entry(fluent).unwrap();
+        assert_eq!(line.message, "GET / HTTP/1.1");
+        assert_eq!(line.time, Some(Timestamp::from_unix_micros(1_794_993_302_500_000)));
+        let keys: Vec<&str> = line.attributes.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["stream", "container_name"]);
+        let other = br#"{"@timestamp":"2026-11-18T09:15:02Z","msg":"hello","severity":"warning"}"#;
+        let (line, _) = entry(other).unwrap();
+        assert_eq!((line.message.as_str(), line.level), ("hello", Some(Level::Warn)));
+        assert!(line.time.is_some());
+        assert!(entry(br#"{"log":"\n"}"#).is_none(), "an empty line");
     }
 
     #[test]

@@ -193,7 +193,7 @@ impl App {
             let flush = flush.clone();
             async move {
                 if let Err(error) = flush.flush().await {
-                    tracing::warn!(%error, "cannot write the ingest counts");
+                    tracing::warn!(error = %chain(&error), "cannot write the ingest counts");
                 }
             }
         }));
@@ -202,7 +202,7 @@ impl App {
             let flush = flush.clone();
             async move {
                 if let Err(error) = flush.flush().await {
-                    tracing::warn!(%error, "cannot write the performance rollups");
+                    tracing::warn!(error = %chain(&error), "cannot write the performance rollups");
                 }
             }
         }));
@@ -217,7 +217,7 @@ impl App {
                         "scheduled tasks did not run or took too long"
                     ),
                     Ok(_) => {}
-                    Err(error) => tracing::warn!(%error, "cannot check the scheduled tasks"),
+                    Err(error) => tracing::warn!(error = %chain(&error), "cannot check the scheduled tasks"),
                 }
             }
         }));
@@ -228,7 +228,7 @@ impl App {
                 match purge.execute().await {
                     Ok(0) => {}
                     Ok(count) => tracing::info!(count, "expired sessions deleted"),
-                    Err(error) => tracing::warn!(%error, "cannot delete expired sessions"),
+                    Err(error) => tracing::warn!(error = %chain(&error), "cannot delete expired sessions"),
                 }
             }
         }));
@@ -245,7 +245,7 @@ impl App {
                         "retention applied"
                     ),
                     Ok(_) => {}
-                    Err(error) => tracing::warn!(%error, "cannot apply the retention"),
+                    Err(error) => tracing::warn!(error = %chain(&error), "cannot apply the retention"),
                 }
             }
         }));
@@ -279,11 +279,11 @@ impl App {
             self.events.close().await;
             self.transactions.close().await;
             if let Err(error) = self.rollups.flush().await {
-                tracing::warn!(%error, "cannot write the performance rollups");
+                tracing::warn!(error = %chain(&error), "cannot write the performance rollups");
             }
             self.segments.close_readers().await;
             if let Err(error) = self.counter.flush().await {
-                tracing::warn!(%error, "cannot write the ingest counts");
+                tracing::warn!(error = %chain(&error), "cannot write the ingest counts");
             }
             self.db.close().await;
         };
@@ -291,6 +291,18 @@ impl App {
             tracing::warn!("shutdown did not finish in time");
         }
     }
+}
+
+/// An error with its causes, as one line, for the log.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
 }
 
 /// Runs `work` every `period` until told to stop; the first run is after one
@@ -339,7 +351,7 @@ async fn shutdown_signal() {
                 signal.recv().await;
             }
             Err(error) => {
-                tracing::warn!(%error, "cannot listen for SIGTERM");
+                tracing::warn!(error = %chain(&error), "cannot listen for SIGTERM");
                 std::future::pending::<()>().await;
             }
         }

@@ -5,10 +5,13 @@
 #   Logdock    http://localhost:18480   (setup code dev-setup-code)
 #   Laravel    http://localhost:18400   (/scenario/log, /fail, /handled, /job)
 #   Mailpit    http://localhost:18425   (the e-mail Logdock sends)
+#   Nginx      http://localhost:18401   (in front of Laravel)
 #
 # The Laravel containers send to `capture`, which keeps a copy of what the
 # SDK sent in dev/captured/ and passes it on to Logdock. Their DSN comes from
-# LARAVEL_DSN, which dev/e2e/run.mjs creates.
+# LARAVEL_DSN, which dev/e2e/run.mjs creates. The forwarders (docs/forwarders.md)
+# get keys of their own: Vector reads Nginx's output and Laravel's JSON log
+# file, Fluent Bit gets the worker's output through Docker's fluentd driver.
 name: logdock-dev
 
 x-laravel: &laravel
@@ -35,6 +38,8 @@ x-laravel: &laravel
     SENTRY_SEND_DEFAULT_PII: "false"
     SENTRY_ENABLE_LOGS: "true"
     SENTRY_LOG_LEVEL: info
+    # The `json` channel's files, for the forwarders' buffered mode.
+    LOG_JSON_PATH: /data/logs/laravel.json
     # Monitoring: every request and job as a transaction, every scheduled
     # task as a monitor.
     SENTRY_TRACES_SAMPLE_RATE: ${LARAVEL_TRACES_SAMPLE_RATE:-1.0}
@@ -102,6 +107,16 @@ services:
     environment:
       <<: *laravel-env
       LOG_SERVICE: horizon
+      # Its own output only (queue:work's lines), through Fluent Bit; its log
+      # entries go through the SDK.
+      LOG_STACK: sentry_logs
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: 127.0.0.1:18424
+        fluentd-async: "true"
+        tag: docker.{{.Name}}
+        labels: com.docker.compose.service
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -116,5 +131,51 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  nginx:
+    image: nginx:1.31.9-alpine
+    restart: unless-stopped
+    labels:
+      logdock.forward: "true"
+    volumes:
+      - ./dev/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:18401:80"
+    depends_on:
+      - web
+
+  vector:
+    image: timberio/vector:0.62.0-alpine
+    restart: unless-stopped
+    environment:
+      VECTOR_DANGEROUSLY_ALLOW_ENV_VAR_INTERPOLATION: "true"
+      LOGDOCK_URL: http://logdock:8080
+      LOGDOCK_KEY: ${LOGDOCK_VECTOR_KEY:-}
+      LOGDOCK_STACK: logdock-dev
+      LOGDOCK_HOST: dev-host
+      LARAVEL_LOGS: /laravel/logs
+    volumes:
+      - ./forwarders/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - laravel-data:/laravel:ro
+      - vector-data:/var/lib/vector
+
+  fluent-bit:
+    image: fluent/fluent-bit:5.2.0
+    restart: unless-stopped
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/config/fluent-bit.yaml"]
+    environment:
+      LOGDOCK_HOST_NAME: logdock
+      LOGDOCK_PORT: "8080"
+      LOGDOCK_TLS: "off"
+      LOGDOCK_KEY: ${LOGDOCK_FLUENT_KEY:-}
+      LOGDOCK_HOST: dev-host
+    ports:
+      - "127.0.0.1:18424:24224"
+    volumes:
+      - ./forwarders/fluent-bit/fluent-bit.yaml:/config/fluent-bit.yaml:ro
+      - fluent-bit-data:/var/lib/fluent-bit
+
 volumes:
   laravel-data:
+  vector-data:
+  fluent-bit-data:

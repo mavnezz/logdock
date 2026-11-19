@@ -44,7 +44,7 @@ while errors still go to Bugsink. The first release must therefore cover errors 
 |---|---|
 | **R1** | logs and errors: everything needed to switch Bugsink off and stop reading log files inside containers |
 | **R2** | monitoring: requests, jobs, queries, outgoing requests, cache, scheduled tasks (built in step 7) |
-| **R3** [Later] | forwarders for Docker's stdout/stderr and Nginx, a buffered log mode, alert rules beyond issues |
+| **R3** | forwarders for Docker's stdout/stderr and Nginx, a buffered log mode (built in step 8, [forwarders.md](forwarders.md)); [Later] alert rules beyond issues |
 
 ---
 
@@ -224,7 +224,7 @@ and on an ingest status page. `/health/ready` fails when the writer stalls or fr
 | Mode | Path | Guarantee |
 |---|---|---|
 | **Direct** (R1, the default) | SDK → Logdock | Best effort. The SDK sends once, without retrying. When Logdock is down or answers `429`, the data is lost. |
-| **Buffered** (R3) | Monolog JSON file → Vector → NDJSON endpoint. Vector's `file` source keeps checkpoints in its `data_dir`; its disk buffer needs at least about 256 MB; its `http` sink retries on 408, 429 and 5xx (except 501) | At least once; duplicates are possible. Logs only, not errors or transactions. |
+| **Buffered** (R3) | Monolog JSON file → Vector or Fluent Bit → NDJSON endpoint ([forwarders.md](forwarders.md)). Vector's `file` source keeps checkpoints in its `data_dir`; its disk buffer needs at least 256 MiB; its `http` sink retries on 408, 429 and 5xx (except 501). Fluent Bit keeps its position in a database and its chunks on disk, and retries without limit | At least once; duplicates are possible. Logs only, not errors or transactions. |
 
 In direct mode the stack channel keeps writing the local `laravel.log` as well, but nothing reads it back. Whatever
 Logdock missed exists only in that file.
@@ -615,6 +615,10 @@ against each sentry-laravel version the apps use.
 | 6. Integration and R1 | section 8 tested end to end; `docs/operations.md`; trial on the stages | the test app and one real app on a stage work without Bugsink; **then Bugsink is replaced** |
 | 7. Monitoring (R2) | transactions, spans, rollups, check-ins, their pages | its own plan |
 | 8. Forwarders (R3) | NDJSON from Vector or Fluent Bit, buffered mode, Docker and Nginx logs | its own plan |
+
+**Status (2026-11-19):** steps 0 to 8 are built, one commit each, and checked by `just check` and `just e2e` with the
+Laravel test app. Open: the trial with a real app on a stage (step 6), and with it the switch from Bugsink; sizing
+on the server Logdock will run on (5.6).
 
 ---
 

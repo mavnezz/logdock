@@ -300,7 +300,7 @@ async fn write_counts(segments: &Segments, entries: &[LogEntry]) -> Result<(), P
         let seen = sources.entry(source).or_insert(i64::MIN);
         *seen = (*seen).max(entry.received.unix_micros());
     }
-    let mut tx = segments.db().pool().begin().await.map_err(port)?;
+    let mut tx = segments.db().write().await.map_err(port)?;
     for ((project, environment, service, level, minute), count) in counts {
         sqlx::query(
             "INSERT INTO log_rollups (project_id, environment_id, service, level, minute, count) VALUES (?, ?, ?, ?, ?, ?) \

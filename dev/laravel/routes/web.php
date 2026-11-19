@@ -56,6 +56,12 @@ Route::get('/scenario/slow', function () {
     return 'slow';
 });
 
+Route::get('/scenario/buffered', function () {
+    Log::channel('json')->warning('Buffered line {n} written to a file', ['n' => 7]);
+
+    return 'buffered';
+});
+
 Route::get('/scenario/job', function () {
     ChargeOrder::dispatch(43);
 

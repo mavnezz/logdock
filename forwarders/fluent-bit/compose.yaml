@@ -1,0 +1,33 @@
+# Fluent Bit next to an app's containers, for one stage (docs/forwarders.md).
+# Containers send their output to it with Docker's fluentd logging driver;
+# `docker logs` keeps working (Docker's dual logging):
+#
+#   logging:
+#     driver: fluentd
+#     options:
+#       fluentd-address: 127.0.0.1:24224
+#       fluentd-async: "true"
+#       tag: docker.{{.Name}}
+#       labels: com.docker.compose.service
+services:
+  fluent-bit:
+    image: fluent/fluent-bit:5.2.0
+    restart: unless-stopped
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/config/fluent-bit.yaml"]
+    environment:
+      LOGDOCK_HOST_NAME: ${LOGDOCK_HOST_NAME:?the host name of Logdock, e.g. logdock.example.com}
+      LOGDOCK_PORT: ${LOGDOCK_PORT:-443}
+      LOGDOCK_TLS: ${LOGDOCK_TLS:-on}
+      LOGDOCK_KEY: ${LOGDOCK_FORWARDER_KEY:?an ingest key of this stage}
+      LOGDOCK_HOST: ${LOGDOCK_HOST:-docker-host}
+    ports:
+      # The Docker daemon connects here for the logging driver.
+      - "127.0.0.1:24224:24224"
+    volumes:
+      - ./forwarders/fluent-bit/fluent-bit.yaml:/config/fluent-bit.yaml:ro
+      - laravel-logs:/laravel-logs:ro
+      - fluent-bit-data:/var/lib/fluent-bit
+
+volumes:
+  laravel-logs:
+  fluent-bit-data:

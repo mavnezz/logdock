@@ -1,0 +1,82 @@
+# Fluent Bit for one app and stage (docs/forwarders.md): what containers
+# write to stdout and stderr, through Docker's fluentd logging driver, and
+# Laravel's JSON log files (buffered mode), to Logdock's NDJSON endpoint.
+# Its key decides the project and stage of everything it sends.
+#
+# Environment:
+#   LOGDOCK_HOST_NAME  logdock.example.com
+#   LOGDOCK_PORT       443
+#   LOGDOCK_TLS        on (off only for a Logdock on the same machine)
+#   LOGDOCK_KEY        an ingest key of the app's stage
+#   LOGDOCK_HOST       the Docker host's name, for the entries' host
+
+service:
+  flush: 2
+  log_level: info
+  parsers_file: /fluent-bit/etc/parsers.conf
+  # Kept on disk while Logdock is away.
+  storage.path: /var/lib/fluent-bit
+  storage.sync: normal
+  storage.backlog.mem_limit: 16M
+
+pipeline:
+  inputs:
+    # Containers with the fluentd logging driver send here, tagged
+    # docker.<container name> (docs/forwarders.md).
+    - name: forward
+      listen: 0.0.0.0
+      port: 24224
+      storage.type: filesystem
+
+    # Buffered mode: Monolog's JSON lines, from the files the `json` channel
+    # writes. Fluent Bit keeps how far it read in its database.
+    - name: tail
+      path: /laravel-logs/*.json
+      tag: laravel
+      parser: json
+      db: /var/lib/fluent-bit/tail.db
+      read_from_head: true
+      storage.type: filesystem
+
+  filters:
+    # The driver's record: log, source (stdout or stderr), container_name,
+    # and the labels it was told to add.
+    - name: modify
+      match: docker.*
+      rename:
+        - log message
+        - source stream
+      copy:
+        - com.docker.compose.service service
+      add:
+        - host ${LOGDOCK_HOST}
+
+    - name: modify
+      match: docker.*
+      condition:
+        - key_value_equals stream stderr
+      add:
+        - level error
+
+    # Nginx's access log: method, path and status as fields of their own.
+    - name: parser
+      match: docker.*nginx*
+      key_name: message
+      parser: nginx
+      reserve_data: on
+      preserve_key: on
+
+  outputs:
+    - name: http
+      match: '*'
+      host: ${LOGDOCK_HOST_NAME}
+      port: ${LOGDOCK_PORT}
+      tls: ${LOGDOCK_TLS}
+      uri: /api/v1/ingest/logs
+      format: json_lines
+      json_date_key: timestamp
+      json_date_format: iso8601
+      header: Authorization Bearer ${LOGDOCK_KEY}
+      compress: gzip
+      retry_limit: no_limits
+      storage.total_limit_size: 256M
