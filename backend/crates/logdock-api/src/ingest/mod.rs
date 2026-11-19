@@ -17,9 +17,9 @@ use axum::extract::{DefaultBodyLimit, RawQuery, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
+use logdock_issues::application::{IssueError, NotifyPolicy};
 use logdock_kernel::ProjectId;
 use logdock_logs::application::IngestError;
-use logdock_logs::domain::NewLogEntry;
 use logdock_projects::application::IngestScope;
 use logdock_projects::domain::{Rejection, Tally};
 use logdock_sentry::{Envelope, LogItems};
@@ -159,11 +159,7 @@ async fn admit(state: &ApiState, scope: &IngestScope, items: usize) -> Result<()
 }
 
 /// Entries whose claimed stage is another than the key's are refused.
-fn own_stage(
-    scope: &IngestScope,
-    entries: Vec<(NewLogEntry, Option<String>)>,
-    tally: &mut Tally,
-) -> Vec<NewLogEntry> {
+fn own_stage<T>(scope: &IngestScope, entries: Vec<(T, Option<String>)>, tally: &mut Tally) -> Vec<T> {
     let mut kept = Vec::with_capacity(entries.len());
     for (entry, environment) in entries {
         match environment {
@@ -181,6 +177,18 @@ fn own_stage(
         }
     }
     kept
+}
+
+/// Who hears of the project's issues, from its settings.
+fn notify_policy(scope: &IngestScope) -> NotifyPolicy {
+    let settings = &scope.settings;
+    NotifyPolicy {
+        recipients: settings.notify.iter().map(|a| a.as_str().to_owned()).collect(),
+        new_issues: settings.notify_new_issues,
+        regressions: settings.notify_regressions,
+        project: scope.project_name.to_string(),
+        environment: scope.environment_name.to_string(),
+    }
 }
 
 /// `POST /api/<project>/envelope/`: what Sentry's SDKs send.
@@ -227,8 +235,17 @@ async fn envelope(
 
     let mut tally = Tally::default();
     let mut logs = Vec::new();
+    let mut events = Vec::new();
     for item in &envelope.items {
         match item.kind.as_str() {
+            "event" => match item.json() {
+                Ok(event @ serde_json::Value::Object(_)) => {
+                    let environment = event.get("environment").and_then(value::text);
+                    events.push((event, environment));
+                }
+                Ok(_) => tally.reject(Rejection::Invalid, 1, "an event is no JSON object"),
+                Err(error) => tally.reject(Rejection::Invalid, 1, format!("an event is no JSON: {error}")),
+            },
             "log" => match LogItems::parse(&item.payload) {
                 Ok((items, broken)) => {
                     if broken > 0 {
@@ -242,8 +259,10 @@ async fn envelope(
         }
     }
     let logs = own_stage(&scope, logs, &mut tally);
-    if let Err(refusal) = admit(&state, &scope, logs.len().max(1)).await {
-        tally.reject(refusal.reason, (logs.len() as u64).max(1), "refused before writing");
+    let events = own_stage(&scope, events, &mut tally);
+    let items = (logs.len() + events.len()).max(1);
+    if let Err(refusal) = admit(&state, &scope, items).await {
+        tally.reject(refusal.reason, items as u64, "refused before writing");
         record.execute(project, Some(scope.key), &tally).await;
         return refusal.response();
     }
@@ -262,8 +281,32 @@ async fn envelope(
             }
         }
     }
+    let id = envelope.event_id().map(str::to_owned);
+    if !events.is_empty() {
+        let policy = notify_policy(&scope);
+        for event in events {
+            let payload = value::value(event);
+            let ingest = &state.issues.ingest;
+            match ingest
+                .execute(scope.scope, &scope.settings.redaction, &policy, payload, id.as_deref())
+                .await
+            {
+                Ok(_) => tally.accepted += 1,
+                Err(IssueError::Port(error)) => {
+                    tracing::error!(%error, "cannot keep an error event");
+                    record.execute(project, Some(scope.key), &tally).await;
+                    return refuse(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "unavailable",
+                        Some(Duration::from_secs(30)),
+                    );
+                }
+                Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
+            }
+        }
+    }
     record.execute(project, Some(scope.key), &tally).await;
-    let id = envelope.event_id().unwrap_or_default().to_owned();
+    let id = id.unwrap_or_default();
     (StatusCode::OK, Json(json!({ "id": id }))).into_response()
 }
 

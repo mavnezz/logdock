@@ -13,12 +13,12 @@ import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
+import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 
 import { type LogEntry, openStream, useHistogram, useLogPages, useSources } from './api'
 import { fromQuery, LEVELS, type LevelName, RANGES, toParams, toQuery } from './filters'
-import LevelBadge from './LevelBadge.vue'
 import LogDetail from './LogDetail.vue'
 import LogHistogram from './LogHistogram.vue'
 

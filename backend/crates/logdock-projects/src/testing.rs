@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use logdock_kernel::{
-    AuditEntry, AuditLog, Clock, Day, EnvironmentId, PortError, ProjectId, Secret, Timestamp,
+    AuditEntry, AuditLog, Clock, Day, EnvironmentId, Mail, Mailer, PortError, ProjectId, Secret, Timestamp,
 };
 
 use crate::application::ports::{IngestCounter, KeyRepository, KeyTokens, ProjectRepository};
@@ -219,6 +219,21 @@ impl AuditLog for MemoryAudit {
     }
 }
 
+#[derive(Default)]
+pub struct MemoryMailer(pub Mutex<Vec<Mail>>);
+
+#[async_trait]
+impl Mailer for MemoryMailer {
+    fn configured(&self) -> bool {
+        true
+    }
+
+    async fn send(&self, mail: Mail) -> Result<(), PortError> {
+        self.0.lock().unwrap().push(mail);
+        Ok(())
+    }
+}
+
 pub struct FixedClock(pub Mutex<Timestamp>);
 
 impl Clock for FixedClock {
@@ -240,6 +255,7 @@ pub struct TestProjects {
     pub keys: Arc<MemoryKeys>,
     pub counter: Arc<MemoryCounter>,
     pub audit: Arc<MemoryAudit>,
+    pub mailer: Arc<MemoryMailer>,
     pub clock: Arc<FixedClock>,
 }
 
@@ -248,6 +264,7 @@ impl TestProjects {
         let keys = Arc::new(MemoryKeys::default());
         let counter = Arc::new(MemoryCounter::default());
         let audit = Arc::new(MemoryAudit::default());
+        let mailer = Arc::new(MemoryMailer::default());
         let clock = Arc::new(FixedClock(Mutex::new(Timestamp::from_unix_seconds(1_800_000_000))));
         let ports = ProjectPorts {
             projects: Arc::new(MemoryProjects::default()),
@@ -255,9 +272,10 @@ impl TestProjects {
             tokens: Arc::new(CountingKeys::default()),
             counter: counter.clone(),
             audit: audit.clone(),
+            mailer: mailer.clone(),
             clock: clock.clone(),
         };
-        Self { use_cases: ProjectUseCases::new(ports), keys, counter, audit, clock }
+        Self { use_cases: ProjectUseCases::new(ports), keys, counter, audit, mailer, clock }
     }
 }
 

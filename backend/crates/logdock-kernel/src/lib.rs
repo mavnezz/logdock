@@ -6,6 +6,7 @@
 mod audit;
 mod error;
 mod ids;
+mod mail;
 pub mod redaction;
 mod request;
 mod secret;
@@ -15,6 +16,7 @@ mod value;
 pub use audit::{Actor, AuditEntry, AuditLog, Outcome};
 pub use error::PortError;
 pub use ids::{EnvironmentId, ProjectId, Scope};
+pub use mail::{Mail, Mailer};
 pub use request::RequestContext;
 pub use secret::{Secret, constant_time_eq};
 pub use time::{Clock, Day, InvalidDay, Timestamp, UtcTime};

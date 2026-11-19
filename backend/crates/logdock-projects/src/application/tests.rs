@@ -141,3 +141,18 @@ async fn counts_what_ingest_did() {
         Err(ProjectError::NotFound)
     ));
 }
+
+#[tokio::test]
+async fn sends_a_test_mail_to_the_projects_addresses() {
+    let t = TestProjects::new();
+    let project = t.use_cases.create.execute(&actor(), "orders", &[], &request()).await.unwrap();
+    assert!(matches!(t.use_cases.test_mail.execute(project.id).await, Err(ProjectError::NoRecipients)));
+    let mut settings = ProjectSettings::default();
+    settings.notify.push(NotifyAddress::parse("ops@example.com").unwrap());
+    let changes = ProjectChanges { settings: Some(settings), ..Default::default() };
+    t.use_cases.update.execute(&actor(), project.id, changes, &request()).await.unwrap();
+    assert_eq!(t.use_cases.test_mail.execute(project.id).await.unwrap(), 1);
+    let sent = t.mailer.0.lock().unwrap();
+    assert_eq!(sent[0].to, ["ops@example.com"]);
+    assert!(sent[0].subject.contains("orders"));
+}

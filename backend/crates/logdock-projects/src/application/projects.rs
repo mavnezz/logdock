@@ -247,3 +247,51 @@ impl GetIngestCounts {
         Ok(p.counter.counts(id, since).await?)
     }
 }
+
+/// Command: sends a test e-mail to the project's addresses, so the SMTP
+/// settings and the list can be checked before an issue needs them.
+#[derive(Clone)]
+pub struct SendTestMail {
+    ports: Arc<ProjectPorts>,
+}
+
+impl SendTestMail {
+    pub(crate) fn new(ports: Arc<ProjectPorts>) -> Self {
+        Self { ports }
+    }
+
+    pub async fn execute(&self, id: ProjectId) -> Result<usize, ProjectError> {
+        let p = &self.ports;
+        let project = find(p, id).await?;
+        if !p.mailer.configured() {
+            return Err(ProjectError::MailNotConfigured);
+        }
+        let to: Vec<String> = project.settings.notify.iter().map(|a| a.as_str().to_owned()).collect();
+        if to.is_empty() {
+            return Err(ProjectError::NoRecipients);
+        }
+        let count = to.len();
+        let mail = logdock_kernel::Mail {
+            to,
+            subject: format!("[Logdock] Test e-mail for {}", project.name),
+            text: format!(
+                "This is a test e-mail from Logdock for the project {}.\n\nNew and returning issues will be sent to this address.\n\n-- \nLogdock\n",
+                project.name
+            ),
+        };
+        p.mailer.send(mail).await.map_err(|error| ProjectError::MailFailed(chain(&error)))?;
+        Ok(count)
+    }
+}
+
+/// An error with its causes, as one line.
+fn chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(": ");
+        text.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    text
+}

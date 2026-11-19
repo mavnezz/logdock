@@ -56,6 +56,26 @@ logdock.example.com {
 }
 ```
 
+## E-mail
+
+Logdock sends e-mail about new issues and issues that come back after being
+resolved, to the addresses in each project's settings. It needs an SMTP server
+in `LOGDOCK_SMTP_URL`:
+
+```bash
+LOGDOCK_SMTP_URL=smtp://logdock%40example.com:app-password@mail.example.com:587
+LOGDOCK_MAIL_FROM=Logdock <logdock@example.com>
+```
+
+`smtp://` upgrades with STARTTLS when the server offers it (`?tls=required`
+insists); `smtps://` speaks TLS from the start (port 465). Characters such as
+`@` in the user or password are percent-encoded. Without the variable Logdock
+logs at the start that it sends no e-mail.
+
+The project's settings have *Send a test e-mail*. A failure there shows what
+the mail server answered; failures while notifying are logged as warnings and
+not retried.
+
 ## Data directory
 
 ```text

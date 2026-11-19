@@ -10,7 +10,7 @@ mod tests;
 
 use std::sync::Arc;
 
-use logdock_kernel::{AuditLog, Clock, PortError};
+use logdock_kernel::{AuditLog, Clock, Mailer, PortError};
 
 use crate::domain::InvalidProject;
 pub use auth::{AuthenticateKey, IngestScope, KeyCache, RecordIngest};
@@ -18,7 +18,7 @@ pub use keys::{CreateKey, CreatedKey, ListKeys, RevokeKey};
 use ports::{IngestCounter, KeyRepository, KeyTokens, ProjectRepository};
 pub use projects::{
     AddEnvironment, CreateProject, DeleteProject, GetIngestCounts, GetProject, ListProjects, ProjectChanges,
-    RemoveEnvironment, UpdateProject,
+    RemoveEnvironment, SendTestMail, UpdateProject,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +37,13 @@ pub enum ProjectError {
     EnvironmentInUse,
     #[error("there is no such key")]
     KeyNotFound,
+    #[error("no SMTP server is configured")]
+    MailNotConfigured,
+    #[error("the project has no addresses to notify")]
+    NoRecipients,
+    /// The mail server refused or could not be reached; what it said.
+    #[error("the e-mail could not be sent: {0}")]
+    MailFailed(String),
     #[error(transparent)]
     Port(#[from] PortError),
 }
@@ -50,6 +57,7 @@ pub struct ProjectPorts {
     pub tokens: Arc<dyn KeyTokens>,
     pub counter: Arc<dyn IngestCounter>,
     pub audit: Arc<dyn AuditLog>,
+    pub mailer: Arc<dyn Mailer>,
     pub clock: Arc<dyn Clock>,
 }
 
@@ -69,6 +77,7 @@ pub struct ProjectUseCases {
     pub authenticate_key: AuthenticateKey,
     pub record_ingest: RecordIngest,
     pub ingest_counts: GetIngestCounts,
+    pub test_mail: SendTestMail,
 }
 
 impl ProjectUseCases {
@@ -88,7 +97,8 @@ impl ProjectUseCases {
             revoke_key: RevokeKey::new(Arc::clone(&ports), cache.clone()),
             authenticate_key: AuthenticateKey::new(Arc::clone(&ports), cache),
             record_ingest: RecordIngest::new(Arc::clone(&ports)),
-            ingest_counts: GetIngestCounts::new(ports),
+            ingest_counts: GetIngestCounts::new(Arc::clone(&ports)),
+            test_mail: SendTestMail::new(ports),
         }
     }
 }

@@ -7,9 +7,9 @@ import { formatDateTime } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { LevelBadge } from '@/shared/ui/level'
 
 import type { LogEntry } from './api'
-import LevelBadge from './LevelBadge.vue'
 
 const props = defineProps<{ entry: LogEntry }>()
 const emit = defineEmits<{ close: []; trace: [traceId: string]; filter: [term: string] }>()

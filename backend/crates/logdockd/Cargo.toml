@@ -11,6 +11,7 @@ publish.workspace = true
 logdock-api.workspace = true
 logdock-identity.workspace = true
 logdock-infra.workspace = true
+logdock-issues.workspace = true
 logdock-kernel.workspace = true
 logdock-logs.workspace = true
 logdock-projects.workspace = true

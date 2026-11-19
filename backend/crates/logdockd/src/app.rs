@@ -14,13 +14,16 @@ use logdock_identity::domain::SetupCode;
 use logdock_infra::SystemClock;
 use logdock_infra::health::{DataDirProbe, WriterHealth};
 use logdock_infra::identity::{Argon2Hasher, RandomTokens, new_setup_code};
+use logdock_infra::issues::{SegmentEvents, SqliteIssues};
 use logdock_infra::logs::{LogWriter, SegmentLogStore, SqliteLogStats, WriterConfig, WriterTask};
+use logdock_infra::mail::SmtpMailer;
 use logdock_infra::segments::{Segments, SqliteHousekeeping};
 use logdock_infra::sqlite::{
     Database, RandomKeys, SqliteAccounts, SqliteAudit, SqliteIngestCounter, SqliteKeys, SqliteProjects,
     SqliteSessions,
 };
-use logdock_kernel::Secret;
+use logdock_issues::application::{IssuePorts, IssueUseCases};
+use logdock_kernel::{Mailer, Secret};
 use logdock_logs::application::{LogPorts, LogUseCases};
 use logdock_logs::domain::LogLimits;
 use logdock_projects::application::{ProjectPorts, ProjectUseCases};
@@ -37,6 +40,7 @@ pub struct App {
     db: Database,
     counter: Arc<SqliteIngestCounter>,
     segments: Arc<Segments>,
+    events: Arc<SegmentEvents>,
     log_writer: WriterTask,
     stop: watch::Sender<bool>,
     tasks: Vec<JoinHandle<()>>,
@@ -89,6 +93,12 @@ impl App {
             IdentityConfig { sessions: config.sessions, setup_code, ..IdentityConfig::default() },
         );
 
+        let mailer = SmtpMailer::new(config.smtp_url.as_ref().map(Secret::expose), &config.mail_from)?;
+        if !mailer.configured() {
+            tracing::info!("no SMTP server configured (LOGDOCK_SMTP_URL): no e-mail is sent");
+        }
+        let mailer: Arc<dyn Mailer> = Arc::new(mailer);
+
         let counter = Arc::new(SqliteIngestCounter::new(db.clone()));
         let projects = ProjectUseCases::new(ProjectPorts {
             projects: Arc::new(SqliteProjects::new(db.clone())),
@@ -96,6 +106,7 @@ impl App {
             tokens: Arc::new(RandomKeys),
             counter: counter.clone(),
             audit: audit.clone(),
+            mailer: mailer.clone(),
             clock: clock.clone(),
         });
 
@@ -113,6 +124,17 @@ impl App {
                 clock: clock.clone(),
             },
             LogLimits::default(),
+        );
+        let events = Arc::new(SegmentEvents::new(Arc::clone(&segments)));
+        let issues = IssueUseCases::new(
+            IssuePorts {
+                issues: Arc::new(SqliteIssues::new(db.clone())),
+                events: events.clone(),
+                mailer,
+                audit: audit.clone(),
+                clock: clock.clone(),
+            },
+            config.public_url.clone(),
         );
         let probe = DataDirProbe::new(db.clone(), config.data_dir.clone(), writers);
         let retention = RetentionUseCases::new(
@@ -180,9 +202,9 @@ impl App {
             }
         }));
 
-        let use_cases = UseCases { identity, logs, projects, retention };
+        let use_cases = UseCases { identity, issues, logs, projects, retention };
         let router = logdock_api::router(ApiState::new(use_cases, api_config));
-        Ok(Self { router, db, counter, segments, log_writer: log_writer_task, stop, tasks })
+        Ok(Self { router, db, counter, segments, events, log_writer: log_writer_task, stop, tasks })
     }
 
     /// Finishes what is under way, within `timeout`, and closes the
@@ -195,6 +217,7 @@ impl App {
             }
             // What is queued is written before the database closes.
             self.log_writer.finish().await;
+            self.events.close().await;
             self.segments.close_readers().await;
             if let Err(error) = self.counter.flush().await {
                 tracing::warn!(%error, "cannot write the ingest counts");

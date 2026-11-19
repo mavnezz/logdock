@@ -189,12 +189,17 @@ impl ProjectRepository for SqliteProjects {
     }
 
     async fn delete(&self, id: ProjectId) -> Result<(), PortError> {
-        sqlx::query("DELETE FROM projects WHERE id = ?")
-            .bind(id.get())
-            .execute(self.db.pool())
-            .await
-            .map_err(port)?;
-        Ok(())
+        let mut tx = self.db.pool().begin().await.map_err(port)?;
+        // What the segments' writers count is kept beside them, without a
+        // foreign key: it goes with the project here.
+        for statement in [
+            "DELETE FROM log_rollups WHERE project_id = ?",
+            "DELETE FROM log_sources WHERE project_id = ?",
+            "DELETE FROM projects WHERE id = ?",
+        ] {
+            sqlx::query(statement).bind(id.get()).execute(&mut *tx).await.map_err(port)?;
+        }
+        tx.commit().await.map_err(port)
     }
 
     async fn add_environment(

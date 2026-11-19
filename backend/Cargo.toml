@@ -15,6 +15,7 @@ publish = false
 logdock-api = { path = "crates/logdock-api" }
 logdock-identity = { path = "crates/logdock-identity" }
 logdock-infra = { path = "crates/logdock-infra" }
+logdock-issues = { path = "crates/logdock-issues" }
 logdock-kernel = { path = "crates/logdock-kernel" }
 logdock-logs = { path = "crates/logdock-logs" }
 logdock-projects = { path = "crates/logdock-projects" }
@@ -27,6 +28,8 @@ async-trait = "0.1"
 axum = "0.8"
 axum-extra = { version = "0.12", features = ["cookie"] }
 getrandom = "0.4"
+# Notifications by e-mail, TLS by rustls with the system's certificates.
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls", "ring", "rustls-native-certs"] }
 http-body-util = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

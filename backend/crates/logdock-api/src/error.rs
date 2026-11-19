@@ -130,6 +130,22 @@ impl From<logdock_projects::application::ProjectError> for ApiError {
             E::NotFound | E::EnvironmentNotFound | E::KeyNotFound => Self::NotFound,
             E::EnvironmentTaken => Self::conflict("environment_taken"),
             E::EnvironmentInUse => Self::conflict("environment_in_use"),
+            E::MailNotConfigured => Self::conflict("mail_not_configured"),
+            E::NoRecipients => Self::conflict("no_recipients"),
+            E::MailFailed(detail) => {
+                Self::Rejected { status: StatusCode::BAD_GATEWAY, code: "mail_failed", detail: Some(detail) }
+            }
+            E::Port(e) => Self::internal(e),
+        }
+    }
+}
+
+impl From<logdock_issues::application::IssueError> for ApiError {
+    fn from(error: logdock_issues::application::IssueError) -> Self {
+        use logdock_issues::application::IssueError as E;
+        match error {
+            E::NoEventId => Self::BadRequest("the event has no ID".into()),
+            E::NotFound => Self::NotFound,
             E::Port(e) => Self::internal(e),
         }
     }

@@ -46,6 +46,7 @@ pub const API_V1: &str = "/api/v1";
         (name = "accounts", description = "Accounts and the audit log, for administrators"),
         (name = "projects", description = "Projects, their stages, ingest keys, settings and ingest counts"),
         (name = "logs", description = "Log entries: search, one entry, counts over time, sources"),
+        (name = "issues", description = "Error events grouped into issues, their states, and traces"),
     ),
     modifiers(&SessionSecurity)
 )]

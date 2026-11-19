@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { formatDateTime, formatNumber } from '@/shared/lib/format'
 
 import type { Histogram } from './api'
-import type { LevelGroup } from './filters'
+import type { LevelGroup } from '@/shared/ui/level'
 
 const props = defineProps<{ histogram: Histogram }>()
 const emit = defineEmits<{ select: [range: { from: string; to: string }] }>()

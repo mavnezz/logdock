@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 logdock-identity.workspace = true
+logdock-issues.workspace = true
 logdock-kernel.workspace = true
 logdock-logs.workspace = true
 logdock-projects.workspace = true
@@ -16,6 +17,7 @@ logdock-retention.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
 getrandom.workspace = true
+lettre.workspace = true
 rustix.workspace = true
 serde.workspace = true
 # Keeps attributes in the order clients wrote them.

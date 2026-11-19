@@ -10,11 +10,12 @@ import { Input } from '@/shared/ui/input'
 import { FormField } from '@/shared/ui/page'
 import { Switch } from '@/shared/ui/switch'
 
-import { useUpdateProject } from './api'
+import { useTestMail, useUpdateProject } from './api'
 
 const props = defineProps<{ project: Project }>()
 const { t } = useI18n()
 const update = useUpdateProject(() => props.project.id)
+const testMail = useTestMail(() => props.project.id)
 
 const lines = (values: string[] | null | undefined) => (values ?? []).join('\n')
 const list = (text: string) =>
@@ -96,6 +97,23 @@ async function save(): Promise<void> {
       <label class="flex items-center gap-3 text-sm"
         ><Switch v-model="form.notifyMonitors" />{{ t('settings.notifyMonitors') }}</label
       >
+      <div class="flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          :disabled="testMail.isPending.value"
+          :title="t('settings.testMailHint')"
+          @click="testMail.mutate()"
+          >{{ t('settings.testMail') }}</Button
+        >
+        <span v-if="testMail.data.value" class="text-sm text-muted-foreground">{{
+          t('settings.testMailSent', { count: testMail.data.value.recipients })
+        }}</span>
+        <span v-if="testMail.error.value" class="text-sm text-destructive">{{
+          problemMessage(testMail.error.value)
+        }}</span>
+      </div>
     </fieldset>
 
     <fieldset class="grid gap-3">

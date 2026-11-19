@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { levelGroup } from './filters'
+import { levelGroup } from '.'
 
 const props = defineProps<{ level: string }>()
 const group = computed(() => levelGroup(props.level))

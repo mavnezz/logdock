@@ -31,6 +31,7 @@ pub(crate) fn routes() -> OpenApiRouter<ApiState> {
         .routes(routes!(list_keys, create_key))
         .routes(routes!(revoke_key))
         .routes(routes!(ingest_counts))
+        .routes(routes!(test_mail))
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -504,4 +505,34 @@ async fn ingest_counts(
             })
             .collect(),
     ))
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TestMailSent {
+    /// How many addresses it went to.
+    pub recipients: usize,
+}
+
+/// Sends a test e-mail to the project's addresses.
+#[utoipa::path(
+    post,
+    path = "/projects/{id}/test-mail",
+    tag = "projects",
+    security(("session" = [])),
+    params(("id" = i64, Path)),
+    responses(
+        (status = OK, body = TestMailSent),
+        (status = NOT_FOUND, body = Problem),
+        (status = CONFLICT, description = "`mail_not_configured` or `no_recipients`", body = Problem),
+        (status = BAD_GATEWAY, description = "`mail_failed`: what the mail server said", body = Problem),
+    )
+)]
+async fn test_mail(
+    auth: Auth,
+    State(state): State<ApiState>,
+    Path(id): Path<i64>,
+) -> Result<Json<TestMailSent>, ApiError> {
+    auth.require(Permission::ManageProjects)?;
+    let recipients = state.projects.test_mail.execute(ProjectId::new(id)).await?;
+    Ok(Json(TestMailSent { recipients }))
 }

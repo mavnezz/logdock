@@ -56,6 +56,15 @@ export function useCreateProject() {
   )
 }
 
+export function useTestMail(id: MaybeRefOrGetter<number>) {
+  return useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.POST('/api/v1/projects/{id}/test-mail', { params: { path: { id: toValue(id) } } }),
+      ),
+  })
+}
+
 export function useUpdateProject(id: MaybeRefOrGetter<number>) {
   return useProjectMutation((body: { name?: string; settings?: ProjectSettings }) =>
     unwrap(api.PATCH('/api/v1/projects/{id}', { params: { path: { id: toValue(id) } }, body })),

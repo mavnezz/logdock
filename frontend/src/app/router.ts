@@ -32,6 +32,12 @@ export const routes: RouteRecordRaw[] = [
     children: [
       { path: '', redirect: '/logs' },
       { path: 'logs', component: () => import('@/features/logs/LogsPage.vue') },
+      { path: 'issues', component: () => import('@/features/issues/IssuesPage.vue') },
+      {
+        path: 'issues/:id',
+        component: () => import('@/features/issues/IssuePage.vue'),
+        props: true,
+      },
       { path: 'projects', component: () => import('@/features/projects/ProjectsPage.vue') },
       {
         path: 'projects/:id',

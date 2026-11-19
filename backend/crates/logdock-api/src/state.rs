@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use logdock_identity::application::IdentityUseCases;
+use logdock_issues::application::IssueUseCases;
 use logdock_logs::application::LogUseCases;
 use logdock_projects::application::ProjectUseCases;
 use logdock_retention::application::RetentionUseCases;
@@ -36,6 +37,7 @@ impl ApiConfig {
 /// The use cases of all contexts.
 pub struct UseCases {
     pub identity: IdentityUseCases,
+    pub issues: IssueUseCases,
     pub logs: LogUseCases,
     pub projects: ProjectUseCases,
     pub retention: RetentionUseCases,
@@ -46,6 +48,7 @@ pub struct UseCases {
 #[derive(Clone)]
 pub struct ApiState {
     pub(crate) identity: IdentityUseCases,
+    pub(crate) issues: IssueUseCases,
     pub(crate) logs: LogUseCases,
     pub(crate) projects: ProjectUseCases,
     pub(crate) retention: RetentionUseCases,
@@ -58,6 +61,7 @@ impl ApiState {
     pub fn new(use_cases: UseCases, config: ApiConfig) -> Self {
         Self {
             identity: use_cases.identity,
+            issues: use_cases.issues,
             logs: use_cases.logs,
             projects: use_cases.projects,
             retention: use_cases.retention,

@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use logdock_api::{Cidr, IngestConfig};
 use logdock_identity::domain::SessionPolicy;
+use logdock_kernel::Secret;
 use logdock_retention::domain::RetentionPolicy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +32,10 @@ pub struct Config {
     pub sessions: SessionPolicy,
     /// A fixed setup code instead of a random one, for automated setups.
     pub setup_code: Option<String>,
+    /// The SMTP server for e-mail, with its credentials; none sends none.
+    pub smtp_url: Option<Secret>,
+    /// The sender of e-mail.
+    pub mail_from: String,
     pub log_filter: String,
     pub log_format: LogFormat,
 }
@@ -123,6 +128,11 @@ impl Config {
                 )?,
             },
             setup_code: env.text("LOGDOCK_SETUP_CODE").filter(|code| !code.is_empty()),
+            smtp_url: env.text("LOGDOCK_SMTP_URL").filter(|url| !url.is_empty()).map(Secret::new),
+            mail_from: env
+                .text("LOGDOCK_MAIL_FROM")
+                .filter(|from| !from.is_empty())
+                .unwrap_or_else(|| "Logdock <logdock@localhost>".to_owned()),
             log_filter: env.text("LOGDOCK_LOG_LEVEL").unwrap_or_else(|| "info".to_owned()),
             log_format: env.parse("LOGDOCK_LOG_FORMAT", LogFormat::Json, |text| match text {
                 "json" => Ok(LogFormat::Json),
@@ -240,6 +250,8 @@ mod tests {
         assert_eq!(config.retention, RetentionPolicy::default());
         assert_eq!(config.log_format, LogFormat::Json);
         assert_eq!(config.shutdown_timeout, Duration::from_secs(20));
+        assert!(config.smtp_url.is_none());
+        assert_eq!(config.mail_from, "Logdock <logdock@localhost>");
     }
 
     #[test]
@@ -255,6 +267,8 @@ mod tests {
             ("LOGDOCK_MIN_FREE_DISK", "500MB"),
             ("LOGDOCK_SHUTDOWN_TIMEOUT", "5s"),
             ("LOGDOCK_LOG_FORMAT", "text"),
+            ("LOGDOCK_SMTP_URL", "smtp://user:secret@mail.local:587"),
+            ("LOGDOCK_MAIL_FROM", "ops@example.com"),
         ])
         .unwrap();
         assert_eq!(config.listen.port(), 9000);
@@ -267,6 +281,9 @@ mod tests {
         assert_eq!(config.retention.min_free_bytes, 500_000_000);
         assert_eq!(config.shutdown_timeout, Duration::from_secs(5));
         assert_eq!(config.log_format, LogFormat::Text);
+        assert_eq!(config.smtp_url.as_ref().map(Secret::expose), Some("smtp://user:secret@mail.local:587"));
+        assert!(!format!("{config:?}").contains("secret@"), "the SMTP password stays out of logs");
+        assert_eq!(config.mail_from, "ops@example.com");
     }
 
     #[test]

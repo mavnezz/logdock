@@ -5,15 +5,7 @@ import type { LocationQuery, LocationQueryRaw } from 'vue-router'
 export const LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const
 export type LevelName = (typeof LEVELS)[number]
 
-/** The four colours of the levels: trace with debug, fatal with error. */
-export type LevelGroup = 'debug' | 'info' | 'warn' | 'error'
-
-export function levelGroup(level: string): LevelGroup {
-  if (level === 'trace' || level === 'debug') return 'debug'
-  if (level === 'warn') return 'warn'
-  if (level === 'error' || level === 'fatal') return 'error'
-  return 'info'
-}
+export { levelGroup, type LevelGroup } from '@/shared/ui/level'
 
 export const RANGES = ['15m', '1h', '6h', '24h', '7d', '30d'] as const
 export type Range = (typeof RANGES)[number] | 'custom'

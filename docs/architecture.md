@@ -74,6 +74,7 @@ reverse proxy (TLS, existing) ──────────────► logd
 | `POST /api/v1/ingest/logs` | forwarders (R3), scripts | `Authorization: Bearer <ingest key>` |
 | `/api/v1/…` | web interface | session cookie and CSRF token |
 | `GET /api/v1/logs/stream` | live view | session; Server-Sent Events |
+| `GET /api/v1/events/<event-id>` | web interface, links from the apps | session; an event by the SDK's event ID |
 | `GET /health/live`, `GET /health/ready` | Docker, monitoring | none; the answers hold no data |
 | `/` | web interface | static files served by `logdockd` |
 
@@ -113,7 +114,8 @@ and are checked against the benchmark in 5.6.
 | `LOGDOCK_SHUTDOWN_TIMEOUT` | `20s` | time to drain the queue on SIGTERM |
 | `LOGDOCK_SESSION_IDLE`, `LOGDOCK_SESSION_LIFETIME` | `12h`, `7d` | when sessions end |
 | `LOGDOCK_SETUP_CODE` | random | the first setup's code, for automated setups |
-| `LOGDOCK_SMTP_URL` | – | notifications by e-mail |
+| `LOGDOCK_SMTP_URL` | – | the SMTP server for notifications, with its credentials; without it no e-mail is sent |
+| `LOGDOCK_MAIL_FROM` | `Logdock <logdock@localhost>` | the sender of that e-mail |
 | `PUID`, `PGID` | `1000` | owner of the data directory |
 
 ### 2.5 Data Directory
@@ -286,8 +288,18 @@ Its state:
 - unresolved → resolved, either now or "in the next release". A new event after that marks it as regressed. For "in
   the next release", only an event from a later release counts.
 - muted, until a date or for N more events. After that it is unresolved again.
+- muted "for N more events" means the Nth event brings it back.
 - New and regressed issues are notified by e-mail, to a fixed list of addresses per project that an administrator
-  keeps (also people without an account). E-mail is the only channel for now (decided on 2026-11-18).
+  keeps (also people without an account). E-mail is the only channel for now (decided on 2026-11-18). Ingest does not
+  wait for the mail server; a mail that fails is logged as a warning and not retried. The project's settings have a
+  button that sends a test e-mail to the list.
+
+**Where it is shown.** The issue list filters by project, stage and status, and searches the title and the culprit;
+searching by tag is not built yet [Later]. An issue's page shows its events per four hours over 14 days, the latest
+event (or one picked from the recent ones) with its exception chain, frames (the app's own first, the others on
+request), request, breadcrumbs, tags and contexts, and everything else that carries the event's trace ID: log entries
+and other error events (`GET /api/v1/traces/<trace-id>`). Resolving and muting are open to every account and recorded
+in the audit log; deleting an issue is for administrators.
 
 ### 4.3 Transactions, Spans and Check-ins (R2) [Later]
 

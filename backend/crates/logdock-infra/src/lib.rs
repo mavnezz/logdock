@@ -10,8 +10,10 @@
 mod clock;
 pub mod health;
 pub mod identity;
+pub mod issues;
 mod json;
 pub mod logs;
+pub mod mail;
 mod random;
 pub mod segments;
 pub mod sqlite;

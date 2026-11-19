@@ -11,6 +11,7 @@ publish.workspace = true
 # (no dependency on logdock-infra). See docs/architecture.md, 9.
 [dependencies]
 logdock-identity.workspace = true
+logdock-issues.workspace = true
 logdock-kernel.workspace = true
 logdock-logs.workspace = true
 logdock-projects.workspace = true
@@ -30,6 +31,7 @@ utoipa-axum.workspace = true
 
 [dev-dependencies]
 logdock-identity = { workspace = true, features = ["testing"] }
+logdock-issues = { workspace = true, features = ["testing"] }
 logdock-logs = { workspace = true, features = ["testing"] }
 logdock-projects = { workspace = true, features = ["testing"] }
 async-trait.workspace = true

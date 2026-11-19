@@ -426,6 +426,345 @@
         ]
       }
     },
+    "/api/v1/events/{event_id}": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "One event by the SDK's event ID, as Sentry's SDKs and Bugsink name it.",
+        "operationId": "get_event",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredEventDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/issues": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Issues, newest first unless sorted otherwise.",
+        "operationId": "list_issues",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "`unresolved` (the default), `resolved`, `muted` or `all`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Words in the title or culprit.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`last_seen` (the default), `first_seen` or `count`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IssueListItem"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/issues/{id}": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "One issue with its counts and latest event.",
+        "operationId": "get_issue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueDetailDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Deletes an issue; its events go with their segments.",
+        "operationId": "delete_issue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Resolves, mutes or reopens an issue.",
+        "operationId": "change_issue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeIssueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/issues/{id}/events": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "An issue's events, newest first.",
+        "operationId": "issue_events",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Events older than this time, RFC 3339.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventListItem"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "tags": [
@@ -1408,6 +1747,71 @@
         ]
       }
     },
+    "/api/v1/projects/{id}/test-mail": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Sends a test e-mail to the project's addresses.",
+        "operationId": "test_mail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestMailSent"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`mail_not_configured` or `no_recipients`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`mail_failed`: what the mail server said",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/setup": {
       "get": {
         "tags": [
@@ -1534,6 +1938,41 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Storage"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/traces/{trace_id}": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Everything that carries one trace ID: log entries and error events.",
+        "operationId": "get_trace",
+        "parameters": [
+          {
+            "name": "trace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
                 }
               }
             }
@@ -1704,6 +2143,77 @@
           }
         }
       },
+      "Breadcrumb": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "data": {
+            "type": "object"
+          },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ChangeIssueRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/IssueAction"
+          },
+          "mute_events": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "With `mute`: until this many more events came; the last of them\nbrings it back.",
+            "minimum": 0
+          },
+          "mute_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "With `mute`: for this many minutes.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateAccountRequest": {
         "type": "object",
         "required": [
@@ -1813,6 +2323,269 @@
           }
         }
       },
+      "Event": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "level",
+          "exceptions",
+          "frames",
+          "tags",
+          "breadcrumbs",
+          "contexts",
+          "extra"
+        ],
+        "properties": {
+          "breadcrumbs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Breadcrumb"
+            }
+          },
+          "contexts": {
+            "type": "object",
+            "description": "The payload's contexts (runtime, os, trace, …), redacted.",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "exceptions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExceptionInfo"
+            },
+            "description": "Oldest cause first; the last one was thrown."
+          },
+          "extra": {
+            "type": "object",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackFrame"
+            },
+            "description": "The stack of an event without an exception."
+          },
+          "level": {
+            "type": "string"
+          },
+          "logger": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "platform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RequestInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sdk": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "server_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The container."
+          },
+          "span_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "time": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transaction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The route or job."
+          },
+          "user": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UserInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "EventListItem": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "issue_id",
+          "project_id",
+          "environment_id",
+          "time",
+          "level",
+          "message"
+        ],
+        "properties": {
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "host": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "level": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "time": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transaction": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ExceptionInfo": {
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "frames"
+        ],
+        "properties": {
+          "frames": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StackFrame"
+            },
+            "description": "Oldest call first; the last frame is where it was thrown."
+          },
+          "handled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "module": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "description": "The class."
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
       "Health": {
         "type": "object",
         "required": [
@@ -1899,6 +2672,24 @@
           }
         }
       },
+      "HourCount": {
+        "type": "object",
+        "required": [
+          "hour",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "hour": {
+            "type": "string",
+            "description": "The hour's start, RFC 3339."
+          }
+        }
+      },
       "IngestCount": {
         "type": "object",
         "required": [
@@ -1954,6 +2745,180 @@
             "minimum": 0
           }
         }
+      },
+      "Issue": {
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "environment_id",
+          "title",
+          "level",
+          "status",
+          "first_seen",
+          "last_seen",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "culprit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "first_release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_seen": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_event_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_release": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_seen": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "description": "`debug`, `info`, `warning`, `error` or `fatal`: the worst seen."
+          },
+          "muted_remaining": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "muted_until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "regressed_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolved_in_next_release": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Resolved in the release after this one."
+          },
+          "status": {
+            "type": "string",
+            "description": "`unresolved`, `resolved` or `muted`."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "IssueAction": {
+        "type": "string",
+        "enum": [
+          "resolve",
+          "resolve_next_release",
+          "mute",
+          "reopen"
+        ]
+      },
+      "IssueDetailDto": {
+        "type": "object",
+        "required": [
+          "issue",
+          "hours",
+          "releases"
+        ],
+        "properties": {
+          "hours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HourCount"
+            },
+            "description": "Events per hour of the last 14 days, oldest first."
+          },
+          "issue": {
+            "$ref": "#/components/schemas/Issue"
+          },
+          "latest": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Event",
+                "description": "The latest event, kept with the issue."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "releases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReleaseCount"
+            }
+          }
+        }
+      },
+      "IssueListItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Issue"
+          },
+          {
+            "type": "object",
+            "required": [
+              "last_day"
+            ],
+            "properties": {
+              "last_day": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Events in the last 24 hours.",
+                "minimum": 0
+              }
+            }
+          }
+        ]
       },
       "Key": {
         "type": "object",
@@ -2363,6 +3328,72 @@
           }
         }
       },
+      "ReleaseCount": {
+        "type": "object",
+        "required": [
+          "release",
+          "count",
+          "first_seen",
+          "last_seen"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "first_seen": {
+            "type": "string"
+          },
+          "last_seen": {
+            "type": "string"
+          },
+          "release": {
+            "type": "string"
+          }
+        }
+      },
+      "RequestInfo": {
+        "type": "object",
+        "required": [
+          "headers"
+        ],
+        "properties": {
+          "headers": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "query": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ResetPasswordRequest": {
         "type": "object",
         "required": [
@@ -2470,6 +3501,75 @@
           }
         }
       },
+      "StackFrame": {
+        "type": "object",
+        "required": [
+          "in_app",
+          "pre_context",
+          "post_context"
+        ],
+        "properties": {
+          "abs_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "colno": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "context_line": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "function": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "in_app": {
+            "type": "boolean"
+          },
+          "lineno": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "module": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "post_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pre_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "Storage": {
         "type": "object",
         "required": [
@@ -2524,6 +3624,36 @@
           }
         }
       },
+      "StoredEventDto": {
+        "type": "object",
+        "required": [
+          "issue_id",
+          "project_id",
+          "environment_id",
+          "received",
+          "event"
+        ],
+        "properties": {
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "event": {
+            "$ref": "#/components/schemas/Event"
+          },
+          "issue_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "received": {
+            "type": "string"
+          }
+        }
+      },
       "SystemInfo": {
         "type": "object",
         "required": [
@@ -2538,6 +3668,45 @@
             "description": "The address SDKs and forwarders send to."
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "TestMailSent": {
+        "type": "object",
+        "required": [
+          "recipients"
+        ],
+        "properties": {
+          "recipients": {
+            "type": "integer",
+            "description": "How many addresses it went to.",
+            "minimum": 0
+          }
+        }
+      },
+      "Trace": {
+        "type": "object",
+        "required": [
+          "trace_id",
+          "logs",
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventListItem"
+            }
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            },
+            "description": "The trace's log entries, oldest first (at most 500)."
+          },
+          "trace_id": {
             "type": "string"
           }
         }
@@ -2591,6 +3760,35 @@
           }
         },
         "additionalProperties": false
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -2622,6 +3820,10 @@
     {
       "name": "logs",
       "description": "Log entries: search, one entry, counts over time, sources"
+    },
+    {
+      "name": "issues",
+      "description": "Error events grouped into issues, their states, and traces"
     }
   ]
 }

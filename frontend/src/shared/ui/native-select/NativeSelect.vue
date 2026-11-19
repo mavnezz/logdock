@@ -4,6 +4,8 @@ import type { HTMLAttributes } from 'vue'
 
 import { cn } from '@/shared/lib/utils'
 
+// aria-label and the like belong to the select, not its frame.
+defineOptions({ inheritAttrs: false })
 const props = defineProps<{ id?: string; disabled?: boolean; class?: HTMLAttributes['class'] }>()
 const value = defineModel<string | number>({ required: true })
 </script>
@@ -15,6 +17,7 @@ const value = defineModel<string | number>({ required: true })
 <template>
   <div :class="cn('relative', props.class)">
     <select
+      v-bind="$attrs"
       :id="id"
       v-model="value"
       :disabled="disabled"

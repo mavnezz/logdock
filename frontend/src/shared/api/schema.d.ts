@@ -125,6 +125,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One event by the SDK's event ID, as Sentry's SDKs and Bugsink name it. */
+        get: operations["get_event"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issues, newest first unless sorted otherwise. */
+        get: operations["list_issues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One issue with its counts and latest event. */
+        get: operations["get_issue"];
+        put?: never;
+        post?: never;
+        /** Deletes an issue; its events go with their segments. */
+        delete: operations["delete_issue"];
+        options?: never;
+        head?: never;
+        /** Resolves, mutes or reopens an issue. */
+        patch: operations["change_issue"];
+        trace?: never;
+    };
+    "/api/v1/issues/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An issue's events, newest first. */
+        get: operations["issue_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs": {
         parameters: {
             query?: never;
@@ -353,6 +423,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{id}/test-mail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sends a test e-mail to the project's addresses. */
+        post: operations["test_mail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup": {
         parameters: {
             query?: never;
@@ -397,6 +484,23 @@ export interface paths {
         };
         /** How much each kind of data takes, and the limits. */
         get: operations["storage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/traces/{trace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Everything that carries one trace ID: log entries and error events. */
+        get: operations["get_trace"];
         put?: never;
         post?: never;
         delete?: never;
@@ -475,6 +579,28 @@ export interface components {
             reason?: string | null;
             target?: string | null;
         };
+        Breadcrumb: {
+            category?: string | null;
+            data: Record<string, never>;
+            level?: string | null;
+            message?: string | null;
+            time?: string | null;
+            type?: string | null;
+        };
+        ChangeIssueRequest: {
+            action: components["schemas"]["IssueAction"];
+            /**
+             * Format: int32
+             * @description With `mute`: until this many more events came; the last of them
+             *     brings it back.
+             */
+            mute_events?: number | null;
+            /**
+             * Format: int64
+             * @description With `mute`: for this many minutes.
+             */
+            mute_minutes?: number | null;
+        };
         CreateAccountRequest: {
             email: string;
             locale?: string | null;
@@ -504,6 +630,67 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        Event: {
+            breadcrumbs: components["schemas"]["Breadcrumb"][];
+            /** @description The payload's contexts (runtime, os, trace, …), redacted. */
+            contexts: {
+                [key: string]: unknown;
+            };
+            environment?: string | null;
+            event_id: string;
+            /** @description Oldest cause first; the last one was thrown. */
+            exceptions: components["schemas"]["ExceptionInfo"][];
+            extra: {
+                [key: string]: unknown;
+            };
+            /** @description The stack of an event without an exception. */
+            frames: components["schemas"]["StackFrame"][];
+            level: string;
+            logger?: string | null;
+            message?: string | null;
+            platform?: string | null;
+            release?: string | null;
+            request?: components["schemas"]["RequestInfo"] | null;
+            sdk?: string | null;
+            /** @description The container. */
+            server_name?: string | null;
+            span_id?: string | null;
+            tags: [
+                string,
+                string
+            ][];
+            time?: string | null;
+            trace_id?: string | null;
+            /** @description The route or job. */
+            transaction?: string | null;
+            user?: components["schemas"]["UserInfo"] | null;
+        };
+        EventListItem: {
+            /** Format: int64 */
+            environment_id: number;
+            event_id: string;
+            host?: string | null;
+            /** Format: int64 */
+            issue_id: number;
+            level: string;
+            message: string;
+            /** Format: int64 */
+            project_id: number;
+            release?: string | null;
+            service?: string | null;
+            time: string;
+            trace_id?: string | null;
+            transaction?: string | null;
+        };
+        ExceptionInfo: {
+            /** @description Oldest call first; the last frame is where it was thrown. */
+            frames: components["schemas"]["StackFrame"][];
+            handled?: boolean | null;
+            module?: string | null;
+            /** @description The class. */
+            type: string;
+            value: string;
         };
         Health: {
             /**
@@ -535,6 +722,12 @@ export interface components {
             /** Format: int64 */
             warn: number;
         };
+        HourCount: {
+            /** Format: int64 */
+            count: number;
+            /** @description The hour's start, RFC 3339. */
+            hour: string;
+        };
         IngestCount: {
             /** Format: int64 */
             accepted: number;
@@ -558,6 +751,50 @@ export interface components {
              * @description Items of kinds Logdock does not keep.
              */
             skipped: number;
+        };
+        Issue: {
+            /** Format: int64 */
+            count: number;
+            culprit?: string | null;
+            /** Format: int64 */
+            environment_id: number;
+            first_release?: string | null;
+            first_seen: string;
+            /** Format: int64 */
+            id: number;
+            last_event_id?: string | null;
+            last_release?: string | null;
+            last_seen: string;
+            /** @description `debug`, `info`, `warning`, `error` or `fatal`: the worst seen. */
+            level: string;
+            /** Format: int32 */
+            muted_remaining?: number | null;
+            muted_until?: string | null;
+            /** Format: int64 */
+            project_id: number;
+            regressed_at?: string | null;
+            resolved_at?: string | null;
+            /** @description Resolved in the release after this one. */
+            resolved_in_next_release?: string | null;
+            /** @description `unresolved`, `resolved` or `muted`. */
+            status: string;
+            title: string;
+        };
+        /** @enum {string} */
+        IssueAction: "resolve" | "resolve_next_release" | "mute" | "reopen";
+        IssueDetailDto: {
+            /** @description Events per hour of the last 14 days, oldest first. */
+            hours: components["schemas"]["HourCount"][];
+            issue: components["schemas"]["Issue"];
+            latest?: components["schemas"]["Event"] | null;
+            releases: components["schemas"]["ReleaseCount"][];
+        };
+        IssueListItem: components["schemas"]["Issue"] & {
+            /**
+             * Format: int64
+             * @description Events in the last 24 hours.
+             */
+            last_day: number;
         };
         Key: {
             created_at: string;
@@ -679,6 +916,22 @@ export interface components {
             scrub_emails?: boolean;
             scrub_ip_addresses?: boolean;
         };
+        ReleaseCount: {
+            /** Format: int64 */
+            count: number;
+            first_seen: string;
+            last_seen: string;
+            release: string;
+        };
+        RequestInfo: {
+            headers: [
+                string,
+                string
+            ][];
+            method?: string | null;
+            query?: string | null;
+            url?: string | null;
+        };
         ResetPasswordRequest: {
             password: string;
         };
@@ -715,6 +968,20 @@ export interface components {
              */
             needed: boolean;
         };
+        StackFrame: {
+            abs_path?: string | null;
+            /** Format: int64 */
+            colno?: number | null;
+            context_line?: string | null;
+            filename?: string | null;
+            function?: string | null;
+            in_app: boolean;
+            /** Format: int64 */
+            lineno?: number | null;
+            module?: string | null;
+            post_context: string[];
+            pre_context: string[];
+        };
         Storage: {
             /** Format: int64 */
             database_bytes: number;
@@ -736,10 +1003,30 @@ export interface components {
             /** Format: int64 */
             segment_bytes: number;
         };
+        StoredEventDto: {
+            /** Format: int64 */
+            environment_id: number;
+            event: components["schemas"]["Event"];
+            /** Format: int64 */
+            issue_id: number;
+            /** Format: int64 */
+            project_id: number;
+            received: string;
+        };
         SystemInfo: {
             /** @description The address SDKs and forwarders send to. */
             public_url?: string | null;
             version: string;
+        };
+        TestMailSent: {
+            /** @description How many addresses it went to. */
+            recipients: number;
+        };
+        Trace: {
+            events: components["schemas"]["EventListItem"][];
+            /** @description The trace's log entries, oldest first (at most 500). */
+            logs: components["schemas"]["LogEntry"][];
+            trace_id: string;
         };
         UpdateAccountRequest: {
             disabled?: boolean | null;
@@ -749,6 +1036,12 @@ export interface components {
         UpdateProjectRequest: {
             name?: string | null;
             settings?: components["schemas"]["Settings"] | null;
+        };
+        UserInfo: {
+            email?: string | null;
+            id?: string | null;
+            ip_address?: string | null;
+            username?: string | null;
         };
     };
     responses: never;
@@ -1056,6 +1349,189 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoredEventDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_issues: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description `unresolved` (the default), `resolved`, `muted` or `all`. */
+                status?: string;
+                /** @description Words in the title or culprit. */
+                q?: string;
+                /** @description `last_seen` (the default), `first_seen` or `count`. */
+                sort?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueListItem"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_issue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueDetailDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_issue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    change_issue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeIssueRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Issue"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    issue_events: {
+        parameters: {
+            query?: {
+                /** @description Events older than this time, RFC 3339. */
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventListItem"][];
                 };
             };
         };
@@ -1644,6 +2120,53 @@ export interface operations {
             };
         };
     };
+    test_mail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestMailSent"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `mail_not_configured` or `no_recipients` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `mail_failed`: what the mail server said */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     setup_status: {
         parameters: {
             query?: never;
@@ -1756,6 +2279,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Storage"];
+                };
+            };
+        };
+    };
+    get_trace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trace"];
                 };
             };
         };

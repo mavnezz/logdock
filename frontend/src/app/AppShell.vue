@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Bug,
   FolderKanban,
   LogOut,
   type LucideIcon,
@@ -32,6 +33,7 @@ const icons: Record<string, LucideIcon> = {
   audit: ShieldCheck,
   profile: UserRound,
   logs: ScrollText,
+  issues: Bug,
 }
 
 const items = computed(() => navigation.filter((item) => !item.admin || store.isAdmin))

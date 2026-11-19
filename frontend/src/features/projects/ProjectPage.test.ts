@@ -131,6 +131,28 @@ describe('a project’s page', () => {
     expect(wrapper.text()).toContain('Saved.')
   })
 
+  it('sends a test e-mail and says why it cannot', async () => {
+    let configured = false
+    stubApi({
+      'GET /api/v1/projects/3': () => project(),
+      'GET /api/v1/projects/3/ingest': () => [],
+      'POST /api/v1/projects/3/test-mail': () =>
+        configured ? { recipients: 2 } : reply(409, { code: 'mail_not_configured', status: 409 }),
+    })
+    const { wrapper } = mountWith(ProjectPage, { props: { id: '3' }, attachTo: document.body })
+    useSessionStore().set(session())
+    await flushPromises()
+    button('Settings').click()
+    await flushPromises()
+    button('Send a test e-mail').click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('No mail server is configured')
+    configured = true
+    button('Send a test e-mail').click()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Sent to 2 addresses.')
+  })
+
   it('shows members the overview only', async () => {
     stubApi({
       'GET /api/v1/projects/3': () => project(),
