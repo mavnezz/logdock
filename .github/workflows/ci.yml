@@ -1,12 +1,14 @@
 # Runs exactly what `just check` runs locally, with Rust as
 # rust-toolchain.toml pins it, Node as .nvmrc pins it and the other tools as
-# scripts/install-tools.sh pins them, and builds the Docker image. Actions
-# are pinned to commit SHAs; tags can be moved, commits cannot.
+# scripts/install-tools.sh pins them, builds the Docker image and, once all
+# of it passed, publishes the image to ghcr.io. Actions are pinned to commit
+# SHAs; tags can be moved, commits cannot.
 name: CI
 
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
@@ -72,8 +74,29 @@ jobs:
         with:
           persist-credentials: false
 
+      # The version the binary reports: a tag's (v1.2.3 gives 1.2.3), else
+      # the commit's. The publish job builds with the same, from this cache.
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
       - name: Build
-        run: docker build -f docker/Dockerfile --build-arg LOGDOCK_VERSION="${GITHUB_SHA::12}" -t logdock:ci .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: LOGDOCK_VERSION=${{ steps.version.outputs.version }}
+          tags: logdock:ci
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # The image starts, answers its health check and stops on SIGTERM.
       - name: Smoke test
@@ -113,3 +136,58 @@ jobs:
         with:
           name: captured
           path: dev/captured/
+
+  # Publishes the image to ghcr.io/<owner>/<repo> when everything above
+  # passed: `latest` and `sha-<commit>` from main, `1.2.3` and `1.2` from a
+  # tag `v1.2.3`. Pull requests only build it. compose.ghcr.yaml pulls it.
+  publish:
+    name: Publish image
+    if: ${{ github.event_name == 'push' }}
+    needs: [check, image, e2e]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: LOGDOCK_VERSION=${{ steps.version.outputs.version }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

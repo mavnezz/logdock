@@ -1,0 +1,25 @@
+# Logdock from the image CI publishes to ghcr.io, for a server that needs
+# nothing of this repository but this file (as compose.yaml) and .env:
+#
+#   cp .env.example .env      # set LOGDOCK_PUBLIC_URL at least
+#   mkdir -p data             # owned by PUID:PGID
+#   docker login ghcr.io -u <github-user>   # while the repository is private
+#   docker compose pull && docker compose up -d   # the same two update it
+#
+# `latest` follows main; LOGDOCK_IMAGE pins a version, e.g.
+# ghcr.io/mavnezz/logdock:1.2 or :sha-<commit>. Otherwise as compose.yaml;
+# see docs/operations.md.
+services:
+  logdock:
+    image: ${LOGDOCK_IMAGE:-ghcr.io/mavnezz/logdock:latest}
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${LOGDOCK_BIND:+${LOGDOCK_BIND}:}${LOGDOCK_PORT:-8080}:8080"
+    volumes:
+      - "${LOGDOCK_DATA:-./data}:/data"
+    # Longer than LOGDOCK_SHUTDOWN_TIMEOUT, so the queue is drained.
+    stop_grace_period: 30s

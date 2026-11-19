@@ -31,6 +31,16 @@ on the same host only). Behind a proxy that terminates TLS, `LOGDOCK_PUBLIC_URL`
 directly over plain HTTP, it is `http://<host>:8080`, see [docs/operations.md](docs/operations.md#reached-directly).
 `GET /health/ready` tells whether it can take data.
 
+**Prebuilt image.** CI publishes the image to `ghcr.io/mavnezz/logdock` once all its checks passed: `latest` and
+`sha-<commit>` from `main`, `1.2.3` and `1.2` for a tag `v1.2.3`. A server then needs only
+[`compose.ghcr.yaml`](compose.ghcr.yaml) (as `compose.yaml`) and `.env`:
+
+```bash
+mkdir -p data
+docker login ghcr.io -u <github-user>          # while the repository is private: a token with read:packages
+docker compose pull && docker compose up -d    # the same two commands update it
+```
+
 ## Development
 
 You need Rust (as `rust-toolchain.toml` pins it), Node 24 (`.nvmrc`), `just`, `cargo-deny` and `cargo-llvm-cov`
@@ -48,7 +58,7 @@ just e2e           # Logdock and a Laravel test app in Docker, checked end to en
 |---|---|
 | `backend/` | Cargo workspace: a crate per bounded context, `logdock-kernel`, `-infra`, `-api`, `logdockd` |
 | `frontend/` | Vue 3 interface |
-| `docker/Dockerfile`, `compose.yaml` | the image and how it runs |
+| `docker/Dockerfile`, `compose.yaml`, `compose.ghcr.yaml` | the image and how it runs, built here or pulled from ghcr.io |
 | `dev/laravel`, `dev/e2e`, `compose.dev.yaml` | the Laravel test app and the end-to-end check |
 | `forwarders/` | Vector and Fluent Bit for containers' output and the buffered mode |
 | `docs/` | architecture, Laravel setup, testing, operations |
