@@ -333,7 +333,9 @@ async fn remove_environment(
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Key {
     pub id: i64,
-    pub environment_id: i64,
+    /// The one stage the key sends to; none: the stage its data names in
+    /// `environment`, added to the project the first time.
+    pub environment_id: Option<i64>,
     pub label: Option<String>,
     /// The key's first characters.
     pub prefix: String,
@@ -346,7 +348,7 @@ impl From<&IngestKey> for Key {
     fn from(key: &IngestKey) -> Self {
         Self {
             id: key.id.get(),
-            environment_id: key.environment.get(),
+            environment_id: key.environment.map(EnvironmentId::get),
             label: key.label.as_ref().map(|l| l.as_str().to_owned()),
             prefix: key.prefix.clone(),
             created_at: time(key.created_at),
@@ -387,12 +389,15 @@ async fn list_keys(
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateKeyRequest {
-    pub environment_id: i64,
+    /// The one stage the key sends to; none for a key of the whole project.
+    #[serde(default)]
+    pub environment_id: Option<i64>,
     #[serde(default)]
     pub label: Option<String>,
 }
 
-/// A new key for one stage; its secret and DSN are shown this once.
+/// A new key for the project or one of its stages; its secret and DSN are
+/// shown this once.
 #[utoipa::path(
     post,
     path = "/projects/{id}/keys",
@@ -415,7 +420,7 @@ async fn create_key(
     let created = state
         .projects
         .create_key
-        .execute(&auth.0.actor(), project, EnvironmentId::new(body.environment_id), &label, &client)
+        .execute(&auth.0.actor(), project, body.environment_id.map(EnvironmentId::new), &label, &client)
         .await?;
     let dsn = state.config.dsn(created.secret.expose(), id);
     let body = CreatedKey { key: Key::from(&created.key), secret: created.secret.expose().to_owned(), dsn };

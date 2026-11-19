@@ -52,14 +52,17 @@ impl KeyLabel {
     }
 }
 
-/// A key that lets one project's one stage send data. It is the DSN's public
-/// key; the project and stage it belongs to are what the data is stored
-/// under, whatever the data says about itself.
+/// A key that lets a project send data. It is the DSN's public key; the
+/// project it belongs to is what the data is stored under, whatever the data
+/// says about itself. A key of the whole project takes the stage its data
+/// names (`environment`), as Sentry's DSNs do; a key of one stage takes only
+/// that stage's data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IngestKey {
     pub id: KeyId,
     pub project: ProjectId,
-    pub environment: EnvironmentId,
+    /// The one stage it sends to; `None`: the stage its data names.
+    pub environment: Option<EnvironmentId>,
     pub label: Option<KeyLabel>,
     /// The key's first characters, to tell keys apart.
     pub prefix: String,
@@ -88,7 +91,7 @@ mod tests {
         let key = IngestKey {
             id: KeyId::new(1),
             project: ProjectId::new(1),
-            environment: EnvironmentId::new(1),
+            environment: Some(EnvironmentId::new(1)),
             label: None,
             prefix: "abcd1234".into(),
             created_at: Timestamp::from_unix_seconds(0),

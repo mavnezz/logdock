@@ -190,10 +190,13 @@ commit. Forwarders retry until they get a 2xx answer, which gives at-least-once 
 
 ### 3.4 Keys and Scope
 
-- A project is one application. Each project has environments (its stages). A key belongs to exactly one project and
-  one environment.
-- The key alone decides the project and the environment. An event whose `environment` differs from the key's is
-  rejected and counted. The metadata a client sends is never used for authorization.
+- A project is one application. Each project has environments (its stages). A key belongs to exactly one project,
+  and either to the whole project or to one of its environments.
+- The key alone decides the project. A key of the whole project takes the stage its data names in `environment`, as
+  Sentry's DSNs do: one DSN serves every stage of an app, and a stage named for the first time is added to the project
+  (at most 50 per project; data that names none goes to `production`, Sentry's default). A key of one environment
+  takes that environment's data and data that names none; data that names another is rejected and counted. The
+  metadata a client sends is never used for authorization: it decides only the stage within the key's project.
 - `service`, `host`, the container (`server.address`, the container's hostname by default) and the release only
   describe where an entry came from.
 - A key is 32 random bytes. It is shown once and stored as a SHA-256 hash; that is enough for a random key of this
@@ -239,7 +242,8 @@ Logdock missed exists only in that file.
 |---|---|---|
 | time (UTC, microseconds) | `timestamp` | `timestamp` or `datetime` |
 | received at | the server's clock | the server's clock |
-| project, environment | the key | the key |
+| project | the key | the key |
+| environment | the key's, or attribute `sentry.environment` | the key's, or `environment` |
 | service (web, horizon, scheduler, …) | attribute `service` (8.1) | `service` |
 | host | attribute `host` (8.1) | `host` |
 | container | attribute `server.address` | `container` |

@@ -30,7 +30,7 @@ impl ListKeys {
     }
 }
 
-/// Command: a new key for one stage of a project.
+/// Command: a new key for a project, or for one of its stages.
 #[derive(Clone)]
 pub struct CreateKey {
     ports: Arc<ProjectPorts>,
@@ -45,19 +45,22 @@ impl CreateKey {
         &self,
         actor: &Actor,
         project: ProjectId,
-        environment: EnvironmentId,
+        environment: Option<EnvironmentId>,
         label: &str,
         request: &RequestContext,
     ) -> Result<CreatedKey, ProjectError> {
         let p = &self.ports;
         let found = p.projects.find(project).await?.ok_or(ProjectError::NotFound)?;
-        let env = found.environment(environment).ok_or(ProjectError::EnvironmentNotFound)?;
+        let stage = match environment {
+            Some(id) => found.environment(id).ok_or(ProjectError::EnvironmentNotFound)?.name.as_str(),
+            None => "*",
+        };
         let label = KeyLabel::parse(label)?;
         let secret = p.tokens.new_key();
         let prefix: String = secret.expose().chars().take(IngestKey::PREFIX_LEN).collect();
         let hash = p.tokens.hash(secret.expose());
         let key = p.keys.create(project, environment, label.as_ref(), &prefix, &hash, p.clock.now()).await?;
-        let target = format!("{}/{} {prefix}", found.name, env.name);
+        let target = format!("{}/{stage} {prefix}", found.name);
         let entry =
             AuditEntry::new(p.clock.now(), AuditAction::KeyCreate.as_str(), Outcome::Success, request);
         p.audit.record(entry.by(actor).target(target)).await?;

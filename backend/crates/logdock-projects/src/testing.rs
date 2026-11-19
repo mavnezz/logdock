@@ -131,7 +131,7 @@ impl KeyRepository for MemoryKeys {
     async fn create(
         &self,
         project: ProjectId,
-        environment: EnvironmentId,
+        environment: Option<EnvironmentId>,
         label: Option<&KeyLabel>,
         prefix: &str,
         hash: &KeyHash,

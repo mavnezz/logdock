@@ -72,11 +72,12 @@ describe('a project’s page', () => {
       'GET /api/v1/projects/3': () => project(),
       'GET /api/v1/projects/3/ingest': () => [],
       'GET /api/v1/projects/3/keys': () => [
+        { ...key, id: 9, environment_id: null, label: 'laravel' },
         key,
         { ...key, id: 8, revoked_at: '2026-11-18T10:00:00Z' },
       ],
       'POST /api/v1/projects/3/keys': () => ({
-        key,
+        key: { ...key, environment_id: null },
         secret: 'abcd1234ef',
         dsn: 'https://abcd1234ef@logs.example.com/3',
       }),
@@ -90,15 +91,21 @@ describe('a project’s page', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('abcd1234…')
     expect(wrapper.text()).toContain('revoked')
+    const stages = wrapper.findAll('tbody tr').map((row) => row.findAll('td')[1]!.text())
+    expect(stages).toEqual(['All stages', 'production', 'production'])
 
+    // A new key serves all stages unless one is chosen.
     button('New key').click()
     await flushPromises()
     document.body.querySelector('#key-label')!.closest('form')!.dispatchEvent(new Event('submit'))
     await flushPromises()
+    const posted = api.calls.find((c) => c.method === 'POST')!
+    expect(await posted.clone().json()).toEqual({ environment_id: null, label: '' })
     expect(document.body.querySelector<HTMLInputElement>('#dsn')?.value).toBe(
       'https://abcd1234ef@logs.example.com/3',
     )
-    expect(document.body.textContent).toContain('SENTRY_ENVIRONMENT=production')
+    expect(document.body.textContent).toContain('The stage: APP_ENV')
+    expect(document.body.textContent).not.toContain('SENTRY_ENVIRONMENT=')
     button('Copy').click()
     await flushPromises()
 

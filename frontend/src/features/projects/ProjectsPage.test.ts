@@ -73,5 +73,8 @@ describe('the projects page', () => {
     expect(env).toContain('SENTRY_LARAVEL_DSN=https://k@logs.example.com/3')
     expect(env).toContain('SENTRY_ENVIRONMENT=staging')
     expect(env).toContain('LOG_STACK=daily,sentry_logs')
+    const whole = laravelEnv('https://k@logs.example.com/3', null)
+    expect(whole).not.toContain('SENTRY_ENVIRONMENT=')
+    expect(whole).toContain('# The stage: APP_ENV')
   })
 })

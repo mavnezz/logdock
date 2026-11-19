@@ -28,13 +28,12 @@ use Sentry\Laravel\Integration;
 
 ## 2. `.env`
 
-The same for every container of an app and stage, except the last two lines.
-The DSN comes from the project's *Keys* tab in Logdock; each stage has keys of
-its own.
+The same for every container and stage of an app, except the last two lines.
+The DSN comes from the project's *Keys* tab in Logdock: as with Sentry and
+Bugsink, one DSN serves every stage.
 
 ```dotenv
 SENTRY_LARAVEL_DSN=https://<key>@logdock.example.com/<project-id>
-SENTRY_ENVIRONMENT=production
 SENTRY_RELEASE=<release-or-commit>
 SENTRY_SEND_DEFAULT_PII=false
 # Without it, the SDK sends errors only, no log entries.
@@ -48,10 +47,14 @@ LOG_SERVICE=horizon
 LOG_SERVER=docker-host-02
 ```
 
-`SENTRY_ENVIRONMENT` must be the stage of the key: Logdock refuses data that
-says it comes from another stage (the project's *Overview* counts it as
-*wrong stage*). `SENTRY_LOG_LEVEL` decides what goes to Logdock; entries below
-it stay in the local channel.
+The stage is what the SDK sends as `environment`: `APP_ENV`, or
+`SENTRY_ENVIRONMENT` if set. A stage Logdock has not seen is added to the
+project with its first data, so `dev`, `qa` and `production` appear by
+themselves (up to 50 per project; names of letters, digits, `.`, `_` and `-`).
+A key can also be kept to one stage (*Keys* tab): it then refuses data of
+other stages, and the project's *Overview* counts them as *wrong stage*.
+`SENTRY_LOG_LEVEL` decides what goes to Logdock; entries below it stay in the
+local channel.
 
 ## 3. `config/logging.php`
 

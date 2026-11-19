@@ -33,7 +33,7 @@ x-laravel: &laravel
     LOG_STACK: stderr,sentry_logs
     LOG_LEVEL: debug
     SENTRY_LARAVEL_DSN: ${LARAVEL_DSN:-}
-    SENTRY_ENVIRONMENT: production
+    # No SENTRY_ENVIRONMENT: the SDK names APP_ENV as the stage.
     SENTRY_RELEASE: ${LARAVEL_RELEASE:-dev-1}
     SENTRY_SEND_DEFAULT_PII: "false"
     SENTRY_ENABLE_LOGS: "true"

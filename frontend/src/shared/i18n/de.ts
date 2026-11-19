@@ -304,12 +304,13 @@ const de: Messages = {
   projects: {
     title: 'Projekte',
     description:
-      'Ein Projekt pro Anwendung. Seine Stages halten ihre Daten getrennt, und jede sendet mit eigenen Schlüsseln.',
+      'Ein Projekt pro Anwendung. Seine Stages halten ihre Daten getrennt; sie erscheinen von selbst mit ihren ersten Daten.',
     create: 'Neues Projekt',
     name: 'Name',
     nameHint: 'Zum Beispiel orders-backend.',
     environments: 'Stages',
-    environmentsHint: 'Durch Kommas getrennt, so wie das SDK sie in SENTRY_ENVIRONMENT sendet.',
+    environmentsHint:
+      'Optional, durch Kommas getrennt, so wie die App sie nennt (APP_ENV). Stages erscheinen auch von selbst mit ihren ersten Daten.',
     created: 'Angelegt',
     empty: 'Noch kein Projekt',
     emptyHint: 'Lege für jede Anwendung, die an Logdock sendet, ein Projekt an.',
@@ -324,11 +325,13 @@ const de: Messages = {
   keys: {
     title: 'Ingest-Schlüssel',
     description:
-      'Ein Schlüssel lässt eine Stage dieses Projekts Daten senden. Er ist der öffentliche Schlüssel der DSN; was die Daten auch über sich sagen, sie werden unter Projekt und Stage des Schlüssels gespeichert.',
+      'Ein Schlüssel lässt dieses Projekt Daten senden; er ist der öffentliche Schlüssel der DSN. Wie bei Sentry gilt ein Schlüssel für alle Stages: Die Daten nennen ihre Stage (APP_ENV oder SENTRY_ENVIRONMENT), und eine Stage wird angelegt, wenn sie zum ersten Mal auftaucht.',
     create: 'Neuer Schlüssel',
     key: 'Schlüssel',
     environment: 'Stage',
-    environmentHint: 'Daten mit diesem Schlüssel gehören zu dieser Stage.',
+    allStages: 'Alle Stages',
+    environmentHint:
+      'Alle Stages: Die Daten nennen ihre Stage; Daten ohne Stage landen in production. Eine Stage: Daten anderer Stages werden abgewiesen, z. B. für einen Forwarder, dessen Zeilen keine Stage nennen.',
     label: 'Bezeichnung',
     labelHint: 'Optional, z. B. web oder horizon.',
     lastUsed: 'Zuletzt benutzt',
@@ -344,7 +347,7 @@ const de: Messages = {
     createdDescription: 'Kopiere die DSN jetzt: Der Schlüssel wird nur dieses eine Mal gezeigt.',
     laravel: 'Für die .env der Laravel-App',
     laravelHint:
-      'LOG_SERVICE und LOG_SERVER pro Container setzen. Der Rest der Einrichtung steht in docs/operations.md.',
+      'LOG_SERVICE und LOG_SERVER pro Container setzen. Der Rest der Einrichtung steht in docs/laravel.md.',
     copy: 'Kopieren',
     copied: 'Kopiert',
   },

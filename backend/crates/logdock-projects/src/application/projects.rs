@@ -166,11 +166,12 @@ impl DeleteProject {
 #[derive(Clone)]
 pub struct AddEnvironment {
     ports: Arc<ProjectPorts>,
+    cache: KeyCache,
 }
 
 impl AddEnvironment {
-    pub(crate) fn new(ports: Arc<ProjectPorts>) -> Self {
-        Self { ports }
+    pub(crate) fn new(ports: Arc<ProjectPorts>, cache: KeyCache) -> Self {
+        Self { ports, cache }
     }
 
     pub async fn execute(
@@ -188,6 +189,7 @@ impl AddEnvironment {
             .add_environment(id, &name, p.clock.now())
             .await?
             .ok_or(ProjectError::EnvironmentTaken)?;
+        self.cache.clear().await;
         let target = format!("{}/{}", project.name, name);
         audit(p, AuditAction::EnvironmentAdd, actor, &target, request).await?;
         Ok(environment)
@@ -217,7 +219,7 @@ impl RemoveEnvironment {
         let project = find(p, id).await?;
         let env = project.environment(environment).ok_or(ProjectError::EnvironmentNotFound)?;
         let keys = p.keys.list(id).await?;
-        if keys.iter().any(|key| key.environment == environment && key.is_active()) {
+        if keys.iter().any(|key| key.environment == Some(environment) && key.is_active()) {
             return Err(ProjectError::EnvironmentInUse);
         }
         p.projects.remove_environment(id, environment).await?;

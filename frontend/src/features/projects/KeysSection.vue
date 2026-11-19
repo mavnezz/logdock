@@ -26,14 +26,15 @@ const create = useCreateKey(() => props.project.id)
 const revoke = useRevokeKey(() => props.project.id)
 
 const creating = ref(false)
-const environment = ref<number>(props.project.environments[0]?.id ?? 0)
+// '': a key of the whole project, whose data names its stage.
+const environment = ref<number | ''>('')
 const label = ref('')
 const created = ref<CreatedKey | null>(null)
 const revoking = ref<number | null>(null)
 const copied = ref(false)
 
-const environmentName = (id: number) =>
-  props.project.environments.find((e) => e.id === id)?.name ?? '–'
+const environmentName = (id: number | null | undefined) =>
+  id == null ? null : (props.project.environments.find((e) => e.id === id)?.name ?? '–')
 const snippet = computed(() =>
   created.value
     ? laravelEnv(created.value.dsn, environmentName(created.value.key.environment_id))
@@ -42,7 +43,7 @@ const snippet = computed(() =>
 
 async function submit(): Promise<void> {
   created.value = await create.mutateAsync({
-    environment_id: environment.value,
+    environment_id: environment.value === '' ? null : environment.value,
     label: label.value,
   })
   creating.value = false
@@ -60,9 +61,7 @@ async function copy(text: string): Promise<void> {
   <section class="grid gap-3">
     <div class="flex items-center justify-between gap-2">
       <h2 class="font-medium">{{ t('keys.title') }}</h2>
-      <Button size="sm" :disabled="project.environments.length === 0" @click="creating = true">
-        <Plus />{{ t('keys.create') }}
-      </Button>
+      <Button size="sm" @click="creating = true"> <Plus />{{ t('keys.create') }} </Button>
     </div>
     <p class="text-sm text-muted-foreground">{{ t('keys.description') }}</p>
 
@@ -90,9 +89,11 @@ async function copy(text: string): Promise<void> {
               <span v-if="key.label" class="text-muted-foreground">{{ key.label }}</span>
             </div>
           </TableCell>
-          <TableCell
-            ><Badge variant="secondary">{{ environmentName(key.environment_id) }}</Badge></TableCell
-          >
+          <TableCell>
+            <Badge :variant="key.environment_id == null ? 'outline' : 'secondary'">{{
+              environmentName(key.environment_id) ?? t('keys.allStages')
+            }}</Badge>
+          </TableCell>
           <TableCell class="text-muted-foreground">
             {{ key.last_used_at ? formatRelative(key.last_used_at) : t('keys.never') }}
           </TableCell>
@@ -111,6 +112,7 @@ async function copy(text: string): Promise<void> {
       <form class="grid gap-4" @submit.prevent="submit().catch(() => undefined)">
         <FormField :label="t('keys.environment')" for="key-env" :hint="t('keys.environmentHint')">
           <NativeSelect id="key-env" v-model="environment">
+            <option value="">{{ t('keys.allStages') }}</option>
             <option v-for="env in project.environments" :key="env.id" :value="env.id">
               {{ env.name }}
             </option>

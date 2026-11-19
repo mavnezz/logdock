@@ -13,7 +13,10 @@ use std::sync::Arc;
 use logdock_kernel::{AuditLog, Clock, Mailer, PortError};
 
 use crate::domain::InvalidProject;
-pub use auth::{AuthenticateKey, IngestScope, KeyCache, RecordIngest};
+pub use auth::{
+    AuthenticateKey, DEFAULT_STAGE, IngestScope, KeyCache, MAX_STAGES, RecordIngest, ResolveStage, Stage,
+    StageFor,
+};
 pub use keys::{CreateKey, CreatedKey, ListKeys, RevokeKey};
 use ports::{IngestCounter, KeyRepository, KeyTokens, ProjectRepository};
 pub use projects::{
@@ -75,6 +78,7 @@ pub struct ProjectUseCases {
     pub create_key: CreateKey,
     pub revoke_key: RevokeKey,
     pub authenticate_key: AuthenticateKey,
+    pub resolve_stage: ResolveStage,
     pub record_ingest: RecordIngest,
     pub ingest_counts: GetIngestCounts,
     pub test_mail: SendTestMail,
@@ -90,12 +94,13 @@ impl ProjectUseCases {
             create: CreateProject::new(Arc::clone(&ports)),
             update: UpdateProject::new(Arc::clone(&ports), cache.clone()),
             delete: DeleteProject::new(Arc::clone(&ports), cache.clone()),
-            add_environment: AddEnvironment::new(Arc::clone(&ports)),
+            add_environment: AddEnvironment::new(Arc::clone(&ports), cache.clone()),
             remove_environment: RemoveEnvironment::new(Arc::clone(&ports), cache.clone()),
             list_keys: ListKeys::new(Arc::clone(&ports)),
             create_key: CreateKey::new(Arc::clone(&ports)),
             revoke_key: RevokeKey::new(Arc::clone(&ports), cache.clone()),
-            authenticate_key: AuthenticateKey::new(Arc::clone(&ports), cache),
+            authenticate_key: AuthenticateKey::new(Arc::clone(&ports), cache.clone()),
+            resolve_stage: ResolveStage::new(Arc::clone(&ports), cache),
             record_ingest: RecordIngest::new(Arc::clone(&ports)),
             ingest_counts: GetIngestCounts::new(Arc::clone(&ports)),
             test_mail: SendTestMail::new(ports),

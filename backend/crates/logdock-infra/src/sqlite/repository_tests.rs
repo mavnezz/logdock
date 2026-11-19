@@ -7,7 +7,7 @@ use logdock_identity::domain::{
 use logdock_kernel::{AuditEntry, AuditLog, Day, Outcome, ProjectId, RequestContext, Secret, Timestamp};
 use logdock_projects::application::ports::{IngestCounter, KeyRepository, KeyTokens, ProjectRepository};
 use logdock_projects::domain::{
-    EnvironmentName, NotifyAddress, ProjectName, ProjectSettings, Rejection, Tally,
+    EnvironmentName, KeyLabel, NotifyAddress, ProjectName, ProjectSettings, Rejection, Tally,
 };
 
 use super::*;
@@ -142,21 +142,33 @@ async fn stores_projects_stages_keys_and_counts() {
     projects.update_settings(project.id, &settings).await.unwrap();
     assert_eq!(projects.find(project.id).await.unwrap().unwrap().settings, settings);
 
+    let keys = SqliteKeys::new(db.clone());
+    let tokens = RandomKeys;
     let dev = EnvironmentName::parse("development").unwrap();
     let added = projects.add_environment(project.id, &dev, at).await.unwrap().unwrap();
     assert!(projects.add_environment(project.id, &dev, at).await.unwrap().is_none());
+    let of_dev = tokens.hash("of-dev");
+    keys.create(project.id, Some(added.id), None, "of-dev", &of_dev, at).await.unwrap();
+    let whole = tokens.hash("whole");
+    let label = KeyLabel::parse("laravel").unwrap();
+    let of_project = keys.create(project.id, None, label.as_ref(), "whole", &whole, at).await.unwrap();
     projects.remove_environment(project.id, added.id).await.unwrap();
+    assert!(keys.find_by_hash(&of_dev).await.unwrap().is_none(), "a stage's keys go with it");
+    let kept = keys.find_by_hash(&whole).await.unwrap().unwrap();
+    assert_eq!((kept.environment, &kept.label), (None, &label), "a key of the project stays");
+    assert_eq!(kept, of_project);
 
-    let keys = SqliteKeys::new(db.clone());
-    let tokens = RandomKeys;
     let secret = tokens.new_key();
     assert_eq!(secret.expose().len(), 32);
     let hash = tokens.hash(secret.expose());
     let key = keys
-        .create(project.id, project.environments[0].id, None, &secret.expose()[..8], &hash, at)
+        .create(project.id, Some(project.environments[0].id), None, &secret.expose()[..8], &hash, at)
         .await
         .unwrap();
-    assert_eq!(keys.find_by_hash(&hash).await.unwrap().unwrap().id, key.id);
+    assert_eq!(
+        keys.find_by_hash(&hash).await.unwrap().unwrap().environment,
+        Some(project.environments[0].id)
+    );
     keys.touch(key.id, Timestamp::from_unix_seconds(200)).await.unwrap();
     keys.revoke(key.id, Timestamp::from_unix_seconds(300)).await.unwrap();
     let listed = keys.list(project.id).await.unwrap();

@@ -14,10 +14,12 @@ queue worker's output through Docker's fluentd logging driver.
 
 ## One forwarder per app and stage
 
-A forwarder sends with an ingest key, and the key decides the project and
-stage of everything it sends. So a forwarder runs beside each app and stage,
-in its compose project, with a key of its own (*Keys* tab, label it
-`vector` or `fluent-bit`): the project's *Overview* then shows what each sent.
+A forwarder sends with an ingest key, and the key decides the project of
+everything it sends. Its lines name no stage, so a forwarder runs beside each
+app and stage, in its compose project, with a key of that stage (*Keys* tab,
+choose the stage, label it `vector` or `fluent-bit`): the project's
+*Overview* then shows what each sent. With a key of all stages, lines go to
+the stage their `environment` field names, and to `production` without one.
 
 Logdock answers the NDJSON endpoint after the commit. Both forwarders retry
 until they get a 2xx answer and keep what waits on disk (Vector: at least

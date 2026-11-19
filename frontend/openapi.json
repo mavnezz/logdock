@@ -2100,7 +2100,7 @@
         "tags": [
           "projects"
         ],
-        "summary": "A new key for one stage; its secret and DSN are shown this once.",
+        "summary": "A new key for the project or one of its stages; its secret and DSN are\nshown this once.",
         "operationId": "create_key",
         "parameters": [
           {
@@ -2741,13 +2741,14 @@
       },
       "CreateKeyRequest": {
         "type": "object",
-        "required": [
-          "environment_id"
-        ],
         "properties": {
           "environment_id": {
-            "type": "integer",
-            "format": "int64"
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The one stage the key sends to; none for a key of the whole project."
           },
           "label": {
             "type": [
@@ -3419,7 +3420,6 @@
         "type": "object",
         "required": [
           "id",
-          "environment_id",
           "prefix",
           "created_at"
         ],
@@ -3428,8 +3428,12 @@
             "type": "string"
           },
           "environment_id": {
-            "type": "integer",
-            "format": "int64"
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The one stage the key sends to; none: the stage its data names in\n`environment`, added to the project the first time."
           },
           "id": {
             "type": "integer",

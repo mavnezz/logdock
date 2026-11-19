@@ -57,8 +57,9 @@ test app together, as `compose.dev.yaml` describes them:
   getting the worker's output through Docker's fluentd logging driver, each
   with a key of its own.
 
-The script starts from nothing, sets Logdock up, creates a project, a key and
-an address to notify, starts the app with the key's DSN, calls its scenarios
+The script starts from nothing, sets Logdock up, creates a project with the
+stage `staging` only, a key of the whole project and an address to notify,
+starts the app with the key's DSN (no `SENTRY_ENVIRONMENT`), calls its scenarios
 (`/scenario/log`, `/fail`, `/handled`, `/job`, `/work`, `/slow`, a
 scheduler run with one task that succeeds and one that fails), with tracing
 at 100 % and every scheduled task monitored, and checks
@@ -66,6 +67,7 @@ through Logdock's API:
 
 | Check | What it shows |
 |---|---|
+| the stage `production` (the app's `APP_ENV`) appears with its first data | one DSN for every stage, as with Sentry |
 | a request's log entries arrive with service, host, release and stage | the tap and `.env` of laravel.md |
 | a password in a log context arrives as `[redacted]` | redaction on ingest |
 | entries below `SENTRY_LOG_LEVEL` stay out | the channel's level |

@@ -298,12 +298,13 @@ const en = {
   projects: {
     title: 'Projects',
     description:
-      'One project per application. Its stages keep their data apart, each sending with keys of its own.',
+      'One project per application. Its stages keep their data apart; they appear by themselves with their first data.',
     create: 'New project',
     name: 'Name',
     nameHint: 'For example orders-backend.',
     environments: 'Stages',
-    environmentsHint: 'Comma-separated, as the SDK sends them in SENTRY_ENVIRONMENT.',
+    environmentsHint:
+      'Optional, comma-separated, as the app names them (APP_ENV). Stages also appear by themselves with their first data.',
     created: 'Created',
     empty: 'No project yet',
     emptyHint: 'Create a project for each application that sends to Logdock.',
@@ -318,11 +319,13 @@ const en = {
   keys: {
     title: 'Ingest keys',
     description:
-      'A key lets one stage of this project send data. It is the public key of the DSN; whatever the data says about itself, it is stored under the key’s project and stage.',
+      'A key lets this project send data; it is the public key of the DSN. As with Sentry, one key serves every stage: the data names its stage (APP_ENV or SENTRY_ENVIRONMENT), and a stage is added the first time it appears.',
     create: 'New key',
     key: 'Key',
     environment: 'Stage',
-    environmentHint: 'Data sent with this key belongs to this stage.',
+    allStages: 'All stages',
+    environmentHint:
+      'All stages: the data names its stage; data that names none goes to production. One stage: data of other stages is refused, e.g. for a forwarder, whose lines name no stage.',
     label: 'Label',
     labelHint: 'Optional, e.g. web or horizon.',
     lastUsed: 'Last used',
@@ -337,7 +340,7 @@ const en = {
     createdDescription: 'Copy the DSN now: the key is shown this once.',
     laravel: 'For the Laravel app’s .env',
     laravelHint:
-      'Set LOG_SERVICE and LOG_SERVER per container. docs/operations.md has the rest of the setup.',
+      'Set LOG_SERVICE and LOG_SERVER per container. docs/laravel.md has the rest of the setup.',
     copy: 'Copy',
     copied: 'Copied',
   },

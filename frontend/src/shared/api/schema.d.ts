@@ -487,7 +487,10 @@ export interface paths {
         /** A project's keys, newest first, for administrators. */
         get: operations["list_keys"];
         put?: never;
-        /** A new key for one stage; its secret and DSN are shown this once. */
+        /**
+         * A new key for the project or one of its stages; its secret and DSN are
+         *     shown this once.
+         */
         post: operations["create_key"];
         delete?: never;
         options?: never;
@@ -713,8 +716,11 @@ export interface components {
             role: components["schemas"]["AccountRole"];
         };
         CreateKeyRequest: {
-            /** Format: int64 */
-            environment_id: number;
+            /**
+             * Format: int64
+             * @description The one stage the key sends to; none for a key of the whole project.
+             */
+            environment_id?: number | null;
             label?: string | null;
         };
         CreateProjectRequest: {
@@ -902,8 +908,12 @@ export interface components {
         };
         Key: {
             created_at: string;
-            /** Format: int64 */
-            environment_id: number;
+            /**
+             * Format: int64
+             * @description The one stage the key sends to; none: the stage its data names in
+             *     `environment`, added to the project the first time.
+             */
+            environment_id?: number | null;
             /** Format: int64 */
             id: number;
             label?: string | null;

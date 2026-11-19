@@ -48,10 +48,12 @@ pub trait KeyRepository: Send + Sync {
     /// The project's keys, newest first.
     async fn list(&self, project: ProjectId) -> Result<Vec<IngestKey>, PortError>;
 
+    /// `environment`: the one stage the key sends to; `None` for the whole
+    /// project.
     async fn create(
         &self,
         project: ProjectId,
-        environment: EnvironmentId,
+        environment: Option<EnvironmentId>,
         label: Option<&KeyLabel>,
         prefix: &str,
         hash: &KeyHash,

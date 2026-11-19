@@ -18,11 +18,11 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use logdock_issues::application::{IssueError, NotifyPolicy};
-use logdock_kernel::ProjectId;
+use logdock_kernel::{PortError, ProjectId};
 use logdock_logs::application::IngestError;
 use logdock_monitors::application::MonitorError;
 use logdock_performance::application::PerformanceError;
-use logdock_projects::application::IngestScope;
+use logdock_projects::application::{IngestScope, Stage, StageFor};
 use logdock_projects::domain::{Rejection, Tally};
 use logdock_sentry::{Envelope, LogItems};
 use serde_json::json;
@@ -160,36 +160,67 @@ async fn admit(state: &ApiState, scope: &IngestScope, items: usize) -> Result<()
     Ok(())
 }
 
-/// Entries whose claimed stage is another than the key's are refused.
-fn own_stage<T>(scope: &IngestScope, entries: Vec<(T, Option<String>)>, tally: &mut Tally) -> Vec<T> {
-    let mut kept = Vec::with_capacity(entries.len());
-    for (entry, environment) in entries {
-        match environment {
-            Some(claimed) if !claimed.eq_ignore_ascii_case(scope.environment_name.as_str()) => {
-                tally.reject(
-                    Rejection::Environment,
-                    1,
-                    format!(
-                        "data for stage {claimed:?} sent with a key of {:?}",
-                        scope.environment_name.as_str()
-                    ),
-                );
-            }
-            _ => kept.push(entry),
-        }
-    }
-    kept
+/// The stages one request's data names, each asked once.
+struct Stages<'a> {
+    state: &'a ApiState,
+    scope: &'a IngestScope,
+    known: HashMap<Option<String>, StageFor>,
 }
 
-/// Who hears of the project's issues, from its settings.
-fn notify_policy(scope: &IngestScope) -> NotifyPolicy {
+impl<'a> Stages<'a> {
+    fn new(state: &'a ApiState, scope: &'a IngestScope) -> Self {
+        Self { state, scope, known: HashMap::new() }
+    }
+
+    /// Sorts entries by the stage their `environment` names, in the order
+    /// the stages first appear; entries the key may not send are counted
+    /// as refused.
+    async fn sort<T>(
+        &mut self,
+        entries: Vec<(T, Option<String>)>,
+        tally: &mut Tally,
+    ) -> Result<Vec<(Stage, Vec<T>)>, PortError> {
+        let mut sorted: Vec<(Stage, Vec<T>)> = Vec::new();
+        for (entry, claimed) in entries {
+            let claimed = claimed.map(|name| name.trim().to_ascii_lowercase());
+            let answer = match self.known.get(&claimed) {
+                Some(answer) => answer.clone(),
+                None => {
+                    let resolve = &self.state.projects.resolve_stage;
+                    let answer = resolve.execute(self.scope, claimed.as_deref()).await?;
+                    self.known.insert(claimed, answer.clone());
+                    answer
+                }
+            };
+            match answer {
+                StageFor::Stage(stage) => match sorted.iter_mut().find(|(s, _)| s.scope == stage.scope) {
+                    Some((_, list)) => list.push(entry),
+                    None => sorted.push((stage, vec![entry])),
+                },
+                StageFor::Refused(why) => tally.reject(Rejection::Environment, 1, why),
+            }
+        }
+        Ok(sorted)
+    }
+}
+
+fn count<T>(sorted: &[(Stage, Vec<T>)]) -> usize {
+    sorted.iter().map(|(_, list)| list.len()).sum()
+}
+
+fn unavailable() -> Response {
+    refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)))
+}
+
+/// Who hears of the stage's issues, from the project's settings.
+fn notify_policy(scope: &IngestScope, stage: &Stage) -> NotifyPolicy {
     let settings = &scope.settings;
     NotifyPolicy {
         recipients: settings.notify.iter().map(|a| a.as_str().to_owned()).collect(),
         new_issues: settings.notify_new_issues,
         regressions: settings.notify_regressions,
         project: scope.project_name.to_string(),
-        environment: scope.environment_name.to_string(),
+        environment: stage.name.to_string(),
     }
 }
 
@@ -225,7 +256,7 @@ async fn envelope(
             Ok(scope) => scope,
             Err(error) => {
                 tracing::error!(%error, "cannot check an ingest key");
-                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+                return unavailable();
             }
         },
         None => None,
@@ -271,19 +302,32 @@ async fn envelope(
             _ => tally.skipped += 1,
         }
     }
-    let logs = own_stage(&scope, logs, &mut tally);
-    let events = own_stage(&scope, events, &mut tally);
-    let transactions = own_stage(&scope, transactions, &mut tally);
-    let check_ins = own_stage(&scope, check_ins, &mut tally);
-    let items = (logs.len() + events.len() + transactions.len() + check_ins.len()).max(1);
+    let mut stages = Stages::new(&state, &scope);
+    let sorted = async {
+        Ok::<_, PortError>((
+            stages.sort(logs, &mut tally).await?,
+            stages.sort(events, &mut tally).await?,
+            stages.sort(transactions, &mut tally).await?,
+            stages.sort(check_ins, &mut tally).await?,
+        ))
+    };
+    let (logs, events, transactions, check_ins) = match sorted.await {
+        Ok(sorted) => sorted,
+        Err(error) => {
+            tracing::error!(%error, "cannot find the stage of ingested data");
+            return unavailable();
+        }
+    };
+    let items = (count(&logs) + count(&events) + count(&transactions) + count(&check_ins)).max(1);
     if let Err(refusal) = admit(&state, &scope, items).await {
         tally.reject(refusal.reason, items as u64, "refused before writing");
         record.execute(project, Some(scope.key), &tally).await;
         return refusal.response();
     }
-    if !logs.is_empty() {
+    let rules = &scope.settings.redaction;
+    for (stage, logs) in logs {
         let count = logs.len() as u64;
-        match state.logs.ingest.execute(scope.scope, &scope.settings.redaction, logs, false).await {
+        match state.logs.ingest.execute(stage.scope, rules, logs, false).await {
             Ok(ingested) => tally.accepted += ingested.accepted,
             Err(IngestError::Overloaded) => {
                 tally.reject(Rejection::Overloaded, count, "the writer's queue is full");
@@ -292,56 +336,52 @@ async fn envelope(
             }
             Err(IngestError::Port(error)) => {
                 tracing::error!(%error, "cannot take log entries");
-                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+                return unavailable();
             }
         }
     }
     let id = envelope.event_id().map(str::to_owned);
-    if !events.is_empty() {
-        let policy = notify_policy(&scope);
+    for (stage, events) in events {
+        let policy = notify_policy(&scope, &stage);
         for event in events {
             let payload = value::value(event);
-            let ingest = &state.issues.ingest;
-            match ingest
-                .execute(scope.scope, &scope.settings.redaction, &policy, payload, id.as_deref())
-                .await
-            {
+            match state.issues.ingest.execute(stage.scope, rules, &policy, payload, id.as_deref()).await {
                 Ok(_) => tally.accepted += 1,
                 Err(IssueError::Port(error)) => {
                     tracing::error!(%error, "cannot keep an error event");
                     record.execute(project, Some(scope.key), &tally).await;
-                    return refuse(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "unavailable",
-                        Some(Duration::from_secs(30)),
-                    );
+                    return unavailable();
                 }
                 Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
             }
         }
     }
-    for transaction in transactions {
-        let payload = value::value(transaction);
-        let rules = &scope.settings.redaction;
-        match state.performance.ingest.execute(scope.scope, rules, payload, envelope.sample_rate()).await {
-            Ok(_) => tally.accepted += 1,
-            Err(PerformanceError::Port(error)) => {
-                tracing::error!(%error, "cannot keep a transaction");
-                record.execute(project, Some(scope.key), &tally).await;
-                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+    for (stage, transactions) in transactions {
+        for transaction in transactions {
+            let payload = value::value(transaction);
+            match state.performance.ingest.execute(stage.scope, rules, payload, envelope.sample_rate()).await
+            {
+                Ok(_) => tally.accepted += 1,
+                Err(PerformanceError::Port(error)) => {
+                    tracing::error!(%error, "cannot keep a transaction");
+                    record.execute(project, Some(scope.key), &tally).await;
+                    return unavailable();
+                }
+                Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
             }
-            Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
         }
     }
-    for check_in in check_ins {
-        match state.monitors.ingest.execute(scope.scope, &value::value(check_in)).await {
-            Ok(_) => tally.accepted += 1,
-            Err(MonitorError::Port(error)) => {
-                tracing::error!(%error, "cannot keep a check-in");
-                record.execute(project, Some(scope.key), &tally).await;
-                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+    for (stage, check_ins) in check_ins {
+        for check_in in check_ins {
+            match state.monitors.ingest.execute(stage.scope, &value::value(check_in)).await {
+                Ok(_) => tally.accepted += 1,
+                Err(MonitorError::Port(error)) => {
+                    tracing::error!(%error, "cannot keep a check-in");
+                    record.execute(project, Some(scope.key), &tally).await;
+                    return unavailable();
+                }
+                Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
             }
-            Err(error) => tally.reject(Rejection::Invalid, 1, error.to_string()),
         }
     }
     record.execute(project, Some(scope.key), &tally).await;
@@ -362,7 +402,7 @@ async fn ndjson(State(state): State<ApiState>, headers: HeaderMap, request_body:
             Ok(scope) => scope,
             Err(error) => {
                 tracing::error!(%error, "cannot check an ingest key");
-                return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+                return unavailable();
             }
         },
         None => None,
@@ -370,7 +410,7 @@ async fn ndjson(State(state): State<ApiState>, headers: HeaderMap, request_body:
     let Some(scope) = scope else {
         return refuse(StatusCode::UNAUTHORIZED, "invalid_key", None);
     };
-    let project = scope.scope.project;
+    let project = scope.project;
     let record = &state.projects.record_ingest;
     let Some(bytes) = body(request_body, state.ingest.max_decompressed).await else {
         let tally = Tally::rejected(Rejection::Size, 1, "the body is too large");
@@ -386,7 +426,13 @@ async fn ndjson(State(state): State<ApiState>, headers: HeaderMap, request_body:
         }
     }
     let invalid = tally.rejected.iter().map(|(_, n)| n).sum::<u64>();
-    let entries = own_stage(&scope, entries, &mut tally);
+    let entries = match Stages::new(&state, &scope).sort(entries, &mut tally).await {
+        Ok(sorted) => sorted,
+        Err(error) => {
+            tracing::error!(%error, "cannot find the stage of ingested data");
+            return unavailable();
+        }
+    };
     if entries.is_empty() {
         record.execute(project, Some(scope.key), &tally).await;
         let status = if invalid > 0 { StatusCode::BAD_REQUEST } else { StatusCode::OK };
@@ -396,23 +442,25 @@ async fn ndjson(State(state): State<ApiState>, headers: HeaderMap, request_body:
         )
             .into_response();
     }
-    if let Err(refusal) = admit(&state, &scope, entries.len()).await {
-        tally.reject(refusal.reason, entries.len() as u64, "refused before writing");
+    if let Err(refusal) = admit(&state, &scope, count(&entries)).await {
+        tally.reject(refusal.reason, count(&entries) as u64, "refused before writing");
         record.execute(project, Some(scope.key), &tally).await;
         // Forwarders retry both 429 and 503.
         return refusal.response();
     }
-    let count = entries.len() as u64;
-    match state.logs.ingest.execute(scope.scope, &scope.settings.redaction, entries, true).await {
-        Ok(ingested) => tally.accepted += ingested.accepted,
-        Err(IngestError::Overloaded) => {
-            tally.reject(Rejection::Overloaded, count, "the writer's queue is full");
-            record.execute(project, Some(scope.key), &tally).await;
-            return refuse(StatusCode::SERVICE_UNAVAILABLE, "overloaded", Some(Duration::from_secs(10)));
-        }
-        Err(IngestError::Port(error)) => {
-            tracing::error!(%error, "cannot write log entries");
-            return refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)));
+    for (stage, entries) in entries {
+        let count = entries.len() as u64;
+        match state.logs.ingest.execute(stage.scope, &scope.settings.redaction, entries, true).await {
+            Ok(ingested) => tally.accepted += ingested.accepted,
+            Err(IngestError::Overloaded) => {
+                tally.reject(Rejection::Overloaded, count, "the writer's queue is full");
+                record.execute(project, Some(scope.key), &tally).await;
+                return refuse(StatusCode::SERVICE_UNAVAILABLE, "overloaded", Some(Duration::from_secs(10)));
+            }
+            Err(IngestError::Port(error)) => {
+                tracing::error!(%error, "cannot write log entries");
+                return unavailable();
+            }
         }
     }
     record.execute(project, Some(scope.key), &tally).await;

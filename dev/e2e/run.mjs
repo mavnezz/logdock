@@ -107,13 +107,13 @@ async function main() {
     name: 'Developer',
     password: 'logdock-dev-password',
   })
+  // No production stage yet: it comes with the first data, as in Sentry.
   const project = await logdock.call('POST', '/api/v1/projects', {
     name: PROJECT,
-    environments: ['production', 'staging'],
+    environments: ['staging'],
   })
-  const production = project.environments.find((e) => e.name === 'production')
+  // Keys of the whole project: the data names its stage.
   const key = await logdock.call('POST', `/api/v1/projects/${project.id}/keys`, {
-    environment_id: production.id,
     label: 'laravel',
   })
   await logdock.call('PATCH', `/api/v1/projects/${project.id}`, {
@@ -122,10 +122,7 @@ async function main() {
   const dsn = `http://${key.secret}@capture:8081/${project.id}`
   const forwarderKey = async (label) =>
     (
-      await logdock.call('POST', `/api/v1/projects/${project.id}/keys`, {
-        environment_id: production.id,
-        label,
-      })
+      await logdock.call('POST', `/api/v1/projects/${project.id}/keys`, { label })
     ).secret
   const vectorKey = await forwarderKey('vector')
   const fluentKey = await forwarderKey('fluent-bit')
@@ -168,6 +165,12 @@ async function main() {
   const entry = (q) =>
     eventually(`a log entry for ${q}`, async () => (await search(q)).entries[0])
 
+  let production = { id: -1 }
+  await check('the stage the app names (APP_ENV) appeared with its first data', async () => {
+    production = await eventually('the production stage', async () =>
+      (await logdock.get(`/api/v1/projects/${project.id}`)).environments.find((e) => e.name === 'production'),
+    )
+  })
   await check('a request’s log entries arrive with the container’s metadata', async () => {
     const placed = await entry('placed')
     expect(placed.environment_id === production.id, `stage ${placed.environment_id}`)

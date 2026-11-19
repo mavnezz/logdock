@@ -99,7 +99,8 @@ export function useRemoveEnvironment(id: MaybeRefOrGetter<number>) {
 }
 
 export function useCreateKey(id: MaybeRefOrGetter<number>) {
-  return useProjectMutation((body: { environment_id: number; label: string }) =>
+  // environment_id null: a key of the whole project.
+  return useProjectMutation((body: { environment_id: number | null; label: string }) =>
     unwrap(api.POST('/api/v1/projects/{id}/keys', { params: { path: { id: toValue(id) } }, body })),
   )
 }

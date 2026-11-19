@@ -158,6 +158,62 @@ async fn refuses_wrong_keys_stages_and_broken_envelopes() {
 }
 
 #[tokio::test]
+async fn a_key_of_the_project_takes_every_stage_its_data_names() {
+    let app = TestApp::start().await;
+    let admin = Browser::setup(&app, "ada@example.com").await;
+    let created = admin
+        .post("/api/v1/projects", json!({"name": "orders", "environments": ["production"]}))
+        .await
+        .json();
+    let project = created["id"].as_i64().unwrap();
+    let new_key = admin.post(&format!("/api/v1/projects/{project}/keys"), json!({"label": "laravel"})).await;
+    assert_eq!(new_key.status, StatusCode::CREATED, "{}", new_key.text());
+    assert_eq!(new_key.json()["key"]["environment_id"], json!(null));
+    let key = new_key.json()["secret"].as_str().unwrap().to_owned();
+
+    // As Sentry's DSNs: one key, the stage from the data, added when new.
+    for (stage, body) in [("qa", "from qa"), ("QA", "from QA"), ("production", "from production")] {
+        let sent =
+            app.request(envelope_request(project, &key, log_envelope(stage, body).into_bytes(), false)).await;
+        assert_eq!(sent.status, StatusCode::OK, "{}", sent.text());
+    }
+    let lines = [r#"{"message":"names no stage"}"#, r#"{"message":"from dev","environment":"dev"}"#];
+    assert_eq!(app.request(ndjson(&key, &lines.join("\n"))).await.json()["accepted"], 2);
+    let bad = app.request(ndjson(&key, r#"{"message":"bad","environment":"feature/login"}"#)).await;
+    assert_eq!(bad.json(), json!({"accepted": 0, "rejected": 1}));
+
+    let stages = admin.get(&format!("/api/v1/projects/{project}")).await.json()["environments"].clone();
+    let id_of = |name: &str| {
+        stages.as_array().unwrap().iter().find(|e| e["name"] == name).unwrap_or_else(|| panic!("{stages}"))["id"]
+            .as_i64()
+            .unwrap()
+    };
+    assert_eq!(stages.as_array().unwrap().len(), 3, "{stages}");
+    let page = eventually(&admin, &format!("/api/v1/logs?project={project}"), |page| {
+        page["entries"].as_array().is_some_and(|e| e.len() == 5)
+    })
+    .await;
+    let mut placed: Vec<(String, i64)> = page["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (e["message"].as_str().unwrap().to_owned(), e["environment_id"].as_i64().unwrap()))
+        .collect();
+    placed.sort();
+    assert_eq!(
+        placed,
+        [
+            ("from QA".to_owned(), id_of("qa")),
+            ("from dev".to_owned(), id_of("dev")),
+            ("from production".to_owned(), id_of("production")),
+            ("from qa".to_owned(), id_of("qa")),
+            ("names no stage".to_owned(), id_of("production")),
+        ]
+    );
+    app.stop().await;
+}
+
+#[tokio::test]
 async fn holds_senders_to_their_size_and_rate() {
     let app = TestApp::start_with(&[
         ("LOGDOCK_INGEST_MAX_DECOMPRESSED", "2KB"),

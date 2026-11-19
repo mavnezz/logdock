@@ -29,7 +29,7 @@ fn key(row: &SqliteRow) -> IngestKey {
     IngestKey {
         id: KeyId::new(row.get("id")),
         project: ProjectId::new(row.get("project_id")),
-        environment: EnvironmentId::new(row.get("environment_id")),
+        environment: row.get::<Option<i64>, _>("environment_id").map(EnvironmentId::new),
         label: label.and_then(|l| KeyLabel::parse(&l).ok().flatten()),
         prefix: row.get("prefix"),
         created_at: Timestamp::from_unix_micros(row.get("created_at")),
@@ -52,7 +52,7 @@ impl KeyRepository for SqliteKeys {
     async fn create(
         &self,
         project: ProjectId,
-        environment: EnvironmentId,
+        environment: Option<EnvironmentId>,
         label: Option<&KeyLabel>,
         prefix: &str,
         hash: &KeyHash,
@@ -63,7 +63,7 @@ impl KeyRepository for SqliteKeys {
              VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
         )
         .bind(project.get())
-        .bind(environment.get())
+        .bind(environment.map(EnvironmentId::get))
         .bind(label.map(KeyLabel::as_str))
         .bind(prefix)
         .bind(hash.as_str())
