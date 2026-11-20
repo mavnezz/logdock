@@ -93,11 +93,14 @@ pub struct IssueListItem {
     pub issue: Issue,
     /// Events in the last 24 hours.
     pub last_day: u64,
+    /// The users affected: the different values of its events' `user` tag,
+    /// which the SDK sends only with `send_default_pii`.
+    pub users: u64,
 }
 
 impl From<&IssueSummary> for IssueListItem {
     fn from(summary: &IssueSummary) -> Self {
-        Self { issue: Issue::from(&summary.issue), last_day: summary.last_day }
+        Self { issue: Issue::from(&summary.issue), last_day: summary.last_day, users: summary.users }
     }
 }
 
@@ -110,11 +113,13 @@ pub struct IssueFilters {
     pub environment: Option<String>,
     /// `unresolved` (the default), `resolved`, `muted` or `all`.
     pub status: Option<String>,
-    /// Words in the title or culprit.
+    /// Words in the title or culprit, and tags of its events:
+    /// `user.email:ada@example.com`, `url:"https://shop/cart"`,
+    /// `transaction:/orders*` (a prefix), `!browser:Safari` (without it).
     pub q: Option<String>,
     /// Only issues that first appeared in this release.
     pub release: Option<String>,
-    /// `last_seen` (the default), `first_seen` or `count`.
+    /// `last_seen` (the default), `first_seen`, `count` or `users`.
     pub sort: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
@@ -144,6 +149,7 @@ async fn list_issues(
         "last_seen" => IssueSort::LastSeen,
         "first_seen" => IssueSort::FirstSeen,
         "count" => IssueSort::Count,
+        "users" => IssueSort::Users,
         other => return Err(ApiError::BadRequest(format!("{other:?} is no sort order"))),
     };
     let query = IssueQuery {
@@ -152,6 +158,7 @@ async fn list_issues(
         status,
         text: filters.q,
         first_release: filters.release.filter(|r| !r.trim().is_empty()),
+        tags: Vec::new(),
         sort,
         limit: filters.limit.unwrap_or(50),
         offset: filters.offset.unwrap_or(0),
@@ -357,6 +364,8 @@ pub struct IssueDetailDto {
     pub releases: Vec<ReleaseCount>,
     /// The latest event, kept with the issue.
     pub latest: Option<Event>,
+    /// The users affected.
+    pub users: u64,
 }
 
 impl From<&IssueDetail> for IssueDetailDto {
@@ -382,6 +391,7 @@ impl From<&IssueDetail> for IssueDetailDto {
                 })
                 .collect(),
             latest: d.latest.as_ref().map(Event::from),
+            users: d.users,
         }
     }
 }
@@ -552,21 +562,29 @@ async fn issue_events(
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TagValueDto {
     pub value: String,
-    pub count: u32,
+    pub count: u64,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct TagSummaryDto {
-    /// `release`, `transaction`, `service` or `host`.
+    /// `user`, `transaction`, `url`, `release`, `browser`, `client_os`,
+    /// `service`, `host`, `server_name`, `handled`, `runtime`, or a tag of
+    /// the app's own.
     pub key: String,
     /// Events that had the tag.
-    pub total: u32,
+    pub total: u64,
+    /// Different values; for `user`, the users affected.
+    pub distinct: u32,
+    /// False once an issue keeps no more values of the tag: there may be
+    /// more than `distinct`.
+    pub complete: bool,
     /// The ten most frequent values.
     pub values: Vec<TagValueDto>,
 }
 
-/// Where an issue's recent events (the last 1,000) came from: release,
-/// route or job, service and host, each value with how often.
+/// What an issue's events had in common, from all its events: the users,
+/// route or job, URL, release, browser, service, host and the app's own
+/// tags, each value with how often it came.
 #[utoipa::path(
     get,
     path = "/issues/{id}/tags",
@@ -585,8 +603,10 @@ async fn issue_tags(
     Ok(Json(
         tags.into_iter()
             .map(|tag| TagSummaryDto {
-                key: tag.key.to_owned(),
+                key: tag.key,
                 total: tag.total,
+                distinct: tag.distinct,
+                complete: tag.complete,
                 values: tag
                     .values
                     .into_iter()

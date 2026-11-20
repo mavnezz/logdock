@@ -27,12 +27,14 @@ import {
   useIssueEvents,
   useIssueTags,
   useTrace,
+  tagSearch,
 } from './api'
 import EventView from './EventView.vue'
 import IssueHours from './IssueHours.vue'
 
 const props = defineProps<{ id: string }>()
-const { t } = useI18n()
+const i18n = useI18n()
+const { t } = i18n
 const router = useRouter()
 const session = useSessionStore()
 const names = useProjectNames()
@@ -57,6 +59,11 @@ const event = computed(
 )
 const trace = useTrace(computed(() => event.value?.trace_id ?? null))
 const tags = useIssueTags(id)
+const users = computed(() => detail.data.value?.users ?? 0)
+const tagName = (key: string) =>
+  i18n.te(`issues.tagKeys.${key}`) ? t(`issues.tagKeys.${key}`) : key
+const percent = (count: number, total: number) =>
+  total > 0 ? Math.max(1, Math.round((count / total) * 100)) : 0
 
 // Newer and older events than the one shown, from those loaded.
 const shownId = computed(() => chosen.value ?? detail.data.value?.latest?.event_id ?? null)
@@ -187,10 +194,15 @@ const statusText = computed(() => {
         }}</Alert>
       </header>
 
-      <dl class="grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm sm:grid-cols-4">
+      <dl class="grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm sm:grid-cols-5">
         <div>
           <dt class="text-muted-foreground">{{ t('issues.events') }}</dt>
           <dd class="text-lg font-semibold tabular-nums">{{ formatNumber(issue.count) }}</dd>
+        </div>
+        <div>
+          <dt class="text-muted-foreground">{{ t('issues.usersAffected') }}</dt>
+          <dd v-if="users" class="text-lg font-semibold tabular-nums">{{ formatNumber(users) }}</dd>
+          <dd v-else class="text-xs text-muted-foreground">{{ t('issues.noUsers') }}</dd>
         </div>
         <div>
           <dt class="text-muted-foreground">{{ t('issues.firstSeen') }}</dt>
@@ -300,20 +312,34 @@ const statusText = computed(() => {
           <section v-if="tags.data.value?.length" class="grid gap-3">
             <h2 class="text-sm font-medium">{{ t('issues.origin') }}</h2>
             <div v-for="tag in tags.data.value" :key="tag.key" class="grid gap-1">
-              <h3 class="text-xs text-muted-foreground">{{ t(`issues.tagKeys.${tag.key}`) }}</h3>
-              <ul class="grid gap-1 text-xs" :aria-label="t(`issues.tagKeys.${tag.key}`)">
+              <h3 class="flex justify-between gap-2 text-xs text-muted-foreground">
+                <span>{{ tagName(tag.key) }}</span>
+                <span class="tabular-nums">{{
+                  tag.complete
+                    ? t('issues.distinct', { n: formatNumber(tag.distinct) }, tag.distinct)
+                    : t('issues.distinctAtLeast', { n: formatNumber(tag.distinct) })
+                }}</span>
+              </h3>
+              <ul class="grid gap-1 text-xs" :aria-label="tagName(tag.key)">
                 <li v-for="value in tag.values" :key="value.value" class="relative">
                   <span
                     class="absolute inset-y-0 left-0 rounded-sm bg-muted"
-                    :style="{ width: `${(value.count / tag.total) * 100}%` }"
+                    :style="{ width: `${percent(value.count, tag.total)}%` }"
                     aria-hidden="true"
                   />
-                  <span class="relative flex justify-between gap-2 px-1.5 py-0.5">
-                    <span class="truncate font-mono" :title="value.value">{{ value.value }}</span>
+                  <RouterLink
+                    :to="{
+                      path: '/issues',
+                      query: { q: tagSearch(tag.key, value.value), status: 'all' },
+                    }"
+                    class="relative flex justify-between gap-2 rounded-sm px-1.5 py-0.5 hover:underline"
+                    :title="t('issues.tagIssues', { value: value.value })"
+                  >
+                    <span class="truncate font-mono">{{ value.value }}</span>
                     <span class="shrink-0 tabular-nums text-muted-foreground"
-                      >{{ Math.round((value.count / tag.total) * 100) }} %</span
+                      >{{ percent(value.count, tag.total) }} %</span
                     >
-                  </span>
+                  </RouterLink>
                 </li>
               </ul>
             </div>

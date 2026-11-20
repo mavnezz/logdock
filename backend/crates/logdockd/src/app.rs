@@ -189,6 +189,23 @@ impl App {
 
         let (stop, stopped) = watch::channel(false);
         let mut tasks = Vec::new();
+        // Once, after the update that began counting tags: the events from
+        // before.
+        // Each batch is saved with its place: stopping in between loses
+        // nothing.
+        let (backfill_db, backfill_segments) = (db.clone(), Arc::clone(&segments));
+        let mut backfill_stopped = stopped.clone();
+        tasks.push(tokio::spawn(async move {
+            let backfill = logdock_infra::issues::backfill_tags(&backfill_db, &backfill_segments);
+            tokio::select! {
+                result = backfill => match result {
+                    Ok(0) => {}
+                    Ok(events) => tracing::info!(events, "tags of earlier events counted"),
+                    Err(error) => tracing::warn!(error = %chain(&error), "cannot count the tags of earlier events"),
+                },
+                _ = backfill_stopped.changed() => {}
+            }
+        }));
         let flush = counter.clone();
         tasks.push(every(Duration::from_secs(10), stopped.clone(), move || {
             let flush = flush.clone();

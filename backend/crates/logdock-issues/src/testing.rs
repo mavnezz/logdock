@@ -9,8 +9,8 @@ use logdock_kernel::{
 };
 
 use crate::application::ports::{
-    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSummary, ReleaseCount, ReleaseErrors,
-    StoredEvent,
+    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount,
+    ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
 use crate::application::{IssuePorts, IssueUseCases};
 use crate::domain::{ErrorEvent, Issue, IssueId, IssueStatus, NewIssue};
@@ -19,7 +19,34 @@ use crate::domain::{ErrorEvent, Issue, IssueId, IssueStatus, NewIssue};
 pub struct MemoryIssues {
     pub issues: Mutex<Vec<(Issue, Value)>>,
     hits: Mutex<Vec<(IssueId, Timestamp, Option<String>)>>,
+    /// Each event's tags.
+    tags: Mutex<Vec<(IssueId, String, String)>>,
     next: AtomicI64,
+}
+
+impl MemoryIssues {
+    fn users(&self, id: IssueId) -> u64 {
+        let mut users: Vec<String> = self
+            .tags
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(i, k, _)| *i == id && k == crate::domain::USER)
+            .map(|(_, _, v)| v.clone())
+            .collect();
+        users.sort();
+        users.dedup();
+        users.len() as u64
+    }
+
+    fn has(&self, id: IssueId, filter: &crate::domain::TagFilter) -> bool {
+        let found = self.tags.lock().unwrap().iter().any(|(i, k, v)| {
+            *i == id
+                && *k == filter.key
+                && if filter.prefix { v.starts_with(&filter.value) } else { *v == filter.value }
+        });
+        found != filter.negated
+    }
 }
 
 #[async_trait]
@@ -85,11 +112,19 @@ impl IssueRepository for MemoryIssues {
             .filter(|(i, _)| {
                 query.text.as_deref().is_none_or(|t| i.title.to_lowercase().contains(&t.to_lowercase()))
             })
+            .filter(|(i, _)| query.tags.iter().all(|filter| self.has(i.id, filter)))
             .map(|(issue, _)| IssueSummary {
                 issue: issue.clone(),
                 last_day: hits.iter().filter(|(id, at, _)| *id == issue.id && *at >= since).count() as u64,
+                users: self.users(issue.id),
             })
-            .collect())
+            .collect::<Vec<_>>())
+        .map(|mut list| {
+            if query.sort == IssueSort::Users {
+                list.sort_by_key(|s| std::cmp::Reverse(s.users));
+            }
+            list
+        })
     }
 
     async fn delete(&self, id: IssueId) -> Result<(), PortError> {
@@ -97,9 +132,48 @@ impl IssueRepository for MemoryIssues {
         Ok(())
     }
 
-    async fn record(&self, id: IssueId, at: Timestamp, release: Option<&str>) -> Result<(), PortError> {
+    async fn record(
+        &self,
+        id: IssueId,
+        at: Timestamp,
+        release: Option<&str>,
+        tags: &[(String, String)],
+    ) -> Result<(), PortError> {
         self.hits.lock().unwrap().push((id, at, release.map(str::to_owned)));
+        self.tags.lock().unwrap().extend(tags.iter().map(|(k, v)| (id, k.clone(), v.clone())));
         Ok(())
+    }
+
+    async fn tag_keys(&self, id: IssueId) -> Result<Vec<TagKey>, PortError> {
+        let mut keys: Vec<TagKey> = Vec::new();
+        let tags = self.tags.lock().unwrap();
+        for (_, key, _) in tags.iter().filter(|(i, _, _)| *i == id) {
+            match keys.iter_mut().find(|k| &k.key == key) {
+                Some(known) => known.events += 1,
+                None => keys.push(TagKey { key: key.clone(), events: 1, values: 0 }),
+            }
+        }
+        for known in &mut keys {
+            let mut values: Vec<&String> =
+                tags.iter().filter(|(i, k, _)| *i == id && *k == known.key).map(|(_, _, v)| v).collect();
+            values.sort();
+            values.dedup();
+            known.values = values.len() as u32;
+        }
+        Ok(keys)
+    }
+
+    async fn tag_values(&self, id: IssueId, key: &str, limit: u32) -> Result<Vec<TagCount>, PortError> {
+        let mut values: Vec<TagCount> = Vec::new();
+        for (_, _, value) in self.tags.lock().unwrap().iter().filter(|(i, k, _)| *i == id && k == key) {
+            match values.iter_mut().find(|c| &c.value == value) {
+                Some(known) => known.count += 1,
+                None => values.push(TagCount { value: value.clone(), count: 1 }),
+            }
+        }
+        values.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.value.cmp(&b.value)));
+        values.truncate(limit as usize);
+        Ok(values)
     }
 
     async fn hours(&self, id: IssueId, from: Timestamp, to: Timestamp) -> Result<Vec<(i64, u64)>, PortError> {

@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use logdock_kernel::{EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
 
-use crate::domain::{ErrorEvent, EventLevel, Issue, IssueId, NewIssue};
+use crate::domain::{ErrorEvent, EventLevel, Issue, IssueId, NewIssue, TagFilter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IssueSort {
@@ -11,6 +11,8 @@ pub enum IssueSort {
     LastSeen,
     FirstSeen,
     Count,
+    /// The users affected, most first.
+    Users,
 }
 
 /// Which issues a list shows. Empty lists mean "all".
@@ -22,6 +24,8 @@ pub struct IssueQuery {
     pub status: Option<String>,
     /// Words that appear in the title or culprit.
     pub text: Option<String>,
+    /// Tags the issue's events had (or, negated, never had).
+    pub tags: Vec<TagFilter>,
     /// Issues that first appeared in this release.
     pub first_release: Option<String>,
     pub sort: IssueSort,
@@ -34,6 +38,25 @@ pub struct IssueQuery {
 pub struct IssueSummary {
     pub issue: Issue,
     pub last_day: u64,
+    /// The users affected: the values of its events' `user` tag.
+    pub users: u64,
+}
+
+/// One tag of an issue's events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagKey {
+    pub key: String,
+    /// Events that had it.
+    pub events: u64,
+    /// Values kept; at most [`values_kept`](crate::domain::values_kept).
+    pub values: u32,
+}
+
+/// One value of a tag and how many events had it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagCount {
+    pub value: String,
+    pub count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -75,8 +98,20 @@ pub trait IssueRepository: Send + Sync {
 
     async fn delete(&self, id: IssueId) -> Result<(), PortError>;
 
-    /// Counts an event for its hour and release.
-    async fn record(&self, id: IssueId, at: Timestamp, release: Option<&str>) -> Result<(), PortError>;
+    /// Counts an event for its hour, its release and its tags.
+    async fn record(
+        &self,
+        id: IssueId,
+        at: Timestamp,
+        release: Option<&str>,
+        tags: &[(String, String)],
+    ) -> Result<(), PortError>;
+
+    /// The tags of an issue's events.
+    async fn tag_keys(&self, id: IssueId) -> Result<Vec<TagKey>, PortError>;
+
+    /// A tag's values, most frequent first.
+    async fn tag_values(&self, id: IssueId, key: &str, limit: u32) -> Result<Vec<TagCount>, PortError>;
 
     /// Events per hour (Unix seconds of the hour's start) in `[from, to)`.
     async fn hours(&self, id: IssueId, from: Timestamp, to: Timestamp) -> Result<Vec<(i64, u64)>, PortError>;

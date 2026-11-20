@@ -5,7 +5,7 @@ use logdock_kernel::{Scope, Timestamp, Value};
 
 use super::alerts::{NotifyPolicy, alert_mail};
 use super::{Context, IssueError, hours_ago};
-use crate::domain::{ErrorEvent, IssueId, NewIssue, fingerprint};
+use crate::domain::{ErrorEvent, IssueId, NewIssue, fingerprint, tags_of};
 
 /// What became of an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +76,7 @@ impl IngestEvent {
             }
         };
         drop(guard);
-        c.ports.issues.record(issue.id, time, event.release.as_deref()).await?;
+        c.ports.issues.record(issue.id, time, event.release.as_deref(), &tags_of(&event)).await?;
         c.ports.events.insert(issue.id, scope, &event, time, received).await?;
 
         let tell = (new && policy.new_issues) || (observation.regressed && policy.regressions);

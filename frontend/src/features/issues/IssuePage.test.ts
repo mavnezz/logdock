@@ -25,6 +25,7 @@ function api(status: string = 'unresolved') {
       hours,
       releases: [{ release: '1.0.1', count: 4, first_seen: '', last_seen: '2026-11-18T09:15:02Z' }],
       latest: event(),
+      users: 2,
     }),
     'GET /api/v1/issues/5/events': () => [
       {
@@ -59,10 +60,42 @@ function api(status: string = 'unresolved') {
       event: event({ event_id: 'a1', release: '1.0.0', server_name: 'orders-horizon-1' }),
     }),
     'GET /api/v1/issues/5/tags': () => [
-      { key: 'service', total: 3, values: [{ value: 'web', count: 3 }] },
+      {
+        key: 'user',
+        total: 3,
+        distinct: 2,
+        complete: true,
+        values: [
+          { value: 'id:7', count: 2 },
+          { value: 'id:8', count: 1 },
+        ],
+      },
+      {
+        key: 'transaction',
+        total: 3,
+        distinct: 1,
+        complete: true,
+        values: [{ value: 'POST /orders/{order}/pay', count: 3 }],
+      },
+      {
+        key: 'tenant',
+        total: 3,
+        distinct: 1000,
+        complete: false,
+        values: [{ value: 'acme', count: 3 }],
+      },
+      {
+        key: 'service',
+        total: 3,
+        distinct: 1,
+        complete: true,
+        values: [{ value: 'web', count: 3 }],
+      },
       {
         key: 'release',
         total: 3,
+        distinct: 2,
+        complete: true,
         values: [
           { value: '4f2c1e9', count: 2 },
           { value: '1.0.0', count: 1 },
@@ -155,6 +188,16 @@ describe('an issue’s page', () => {
     // Where its events came from.
     expect(text).toContain('Where it comes from')
     expect(text).toContain('67 %')
+    // The users it affected; each value finds the issues that had it.
+    expect(text).toContain('Users affected')
+    expect(text).toContain('2 values')
+    expect(text).toContain('at least 1,000 values')
+    expect(text).toContain('tenant')
+    const links = wrapper
+      .findAll('aside a')
+      .map((a) => decodeURIComponent(a.attributes('href')!.replaceAll('+', ' ')))
+    expect(links).toContain('/issues?q=user:id:7&status=all')
+    expect(links).toContain('/issues?q=transaction:"POST /orders/{order}/pay"&status=all')
     // The request as Sentry keeps it: every header, the body, the cookies' names.
     expect(text).toContain('[redacted]')
     expect(text).toContain('"order": 42')

@@ -4,7 +4,7 @@ use logdock_kernel::Timestamp;
 
 use super::ports::{EventSummary, IssueQuery, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent};
 use super::{Context, IssueError, hours_ago};
-use crate::domain::{ErrorEvent, Issue, IssueId};
+use crate::domain::{ErrorEvent, Issue, IssueId, IssueSearch, TAG_ORDER, USER, values_kept};
 
 /// Query: issues, filtered and sorted.
 #[derive(Clone)]
@@ -13,8 +13,15 @@ pub struct ListIssues {
 }
 
 impl ListIssues {
+    /// `query.text` may hold tags (`user.email:ada@example.com`), which
+    /// become tag filters.
     pub async fn execute(&self, mut query: IssueQuery) -> Result<Vec<IssueSummary>, IssueError> {
         query.limit = query.limit.clamp(1, 200);
+        if let Some(text) = query.text.take() {
+            let search = IssueSearch::parse(&text);
+            query.text = (!search.words.is_empty()).then(|| search.words.join(" "));
+            query.tags.extend(search.tags);
+        }
         let since = hours_ago(self.context.ports.clock.now(), 24);
         Ok(self.context.ports.issues.list(&query, since).await?)
     }
@@ -30,6 +37,8 @@ pub struct IssueDetail {
     pub releases: Vec<ReleaseCount>,
     /// The latest event, kept with the issue beyond the segments.
     pub latest: Option<ErrorEvent>,
+    /// The users affected.
+    pub users: u64,
 }
 
 /// Query: one issue.
@@ -57,7 +66,8 @@ impl GetIssue {
         let releases = c.ports.issues.releases(id).await?;
         let latest =
             c.ports.issues.latest_event(id).await?.map(|payload| ErrorEvent::from_payload(payload, None));
-        Ok(IssueDetail { issue, hours, releases, latest })
+        let users = c.ports.issues.tag_keys(id).await?.iter().find(|k| k.key == USER).map_or(0, |k| k.values);
+        Ok(IssueDetail { issue, hours, releases, latest, users: u64::from(users) })
     }
 }
 
@@ -94,61 +104,61 @@ impl ReleasesErrors {
     }
 }
 
-/// How often one value of a tag came in an issue's recent events.
+/// How often one value of a tag came in an issue's events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagValue {
     pub value: String,
-    pub count: u32,
+    pub count: u64,
 }
 
-/// One tag across an issue's recent events, its values most frequent first.
+/// One tag across an issue's events, its values most frequent first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagSummary {
-    pub key: &'static str,
+    pub key: String,
     /// Events that had the tag at all.
-    pub total: u32,
+    pub total: u64,
+    /// Different values seen; once it reaches the most kept, there may be
+    /// more.
+    pub distinct: u32,
+    /// Whether [`distinct`](Self::distinct) is all there were.
+    pub complete: bool,
     pub values: Vec<TagValue>,
 }
 
-/// Reads one tag of an event.
-type TagOf = fn(&EventSummary) -> Option<&str>;
+/// Tags whose values another tag shows already.
+const SHOWN_ELSEWHERE: &[&str] =
+    &["user.id", "user.email", "user.username", "user.ip", "browser.name", "client_os.name", "level"];
 
-/// How many recent events [`SummarizeTags`] looks at, as Sentry samples.
-pub const TAG_SAMPLE: u32 = 1000;
-
-/// Query: where an issue's recent events came from: release, route or job,
-/// service and host, each value with how often it came.
+/// Query: what an issue's events had in common: users, route or job, URL,
+/// release, browser, service, host and the app's own tags, each value with
+/// how often it came.
 #[derive(Clone)]
 pub struct SummarizeTags {
     pub(crate) context: Arc<Context>,
 }
 
 impl SummarizeTags {
+    /// Values shown per tag.
+    pub const TOP: u32 = 10;
+
     pub async fn execute(&self, id: IssueId) -> Result<Vec<TagSummary>, IssueError> {
-        let events = self.context.ports.events.list(id, None, TAG_SAMPLE).await?;
-        let tags: [(&'static str, TagOf); 4] = [
-            ("release", |e| e.release.as_deref()),
-            ("transaction", |e| e.transaction.as_deref()),
-            ("service", |e| e.service.as_deref()),
-            ("host", |e| e.host.as_deref()),
-        ];
-        Ok(tags
-            .into_iter()
-            .map(|(key, of)| {
-                let mut counts: Vec<TagValue> = Vec::new();
-                for value in events.iter().filter_map(of) {
-                    match counts.iter_mut().find(|c| c.value == value) {
-                        Some(known) => known.count += 1,
-                        None => counts.push(TagValue { value: value.to_owned(), count: 1 }),
-                    }
-                }
-                counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.value.cmp(&b.value)));
-                let total = counts.iter().map(|c| c.count).sum();
-                counts.truncate(10);
-                TagSummary { key, total, values: counts }
-            })
-            .filter(|summary| summary.total > 0)
-            .collect())
+        let issues = &self.context.ports.issues;
+        let mut keys = issues.tag_keys(id).await?;
+        keys.retain(|k| !SHOWN_ELSEWHERE.contains(&k.key.as_str()));
+        let rank = |key: &str| TAG_ORDER.iter().position(|k| *k == key).unwrap_or(TAG_ORDER.len());
+        keys.sort_by(|a, b| rank(&a.key).cmp(&rank(&b.key)).then_with(|| a.key.cmp(&b.key)));
+        let mut out = Vec::with_capacity(keys.len());
+        for key in keys {
+            let values = issues.tag_values(id, &key.key, Self::TOP).await?;
+            out.push(TagSummary {
+                complete: key.values < values_kept(&key.key),
+                distinct: key.values,
+                total: key.events,
+                values: values.into_iter().map(|v| TagValue { value: v.value, count: v.count }).collect(),
+                key: key.key,
+            });
+        }
+        Ok(out)
     }
 }
 

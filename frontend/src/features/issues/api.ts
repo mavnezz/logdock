@@ -15,7 +15,7 @@ export type ChangeIssue = Schemas['ChangeIssueRequest']
 
 export const STATUSES = ['unresolved', 'resolved', 'muted', 'all'] as const
 export type StatusFilter = (typeof STATUSES)[number]
-export const SORTS = ['last_seen', 'first_seen', 'count'] as const
+export const SORTS = ['last_seen', 'first_seen', 'count', 'users'] as const
 export type Sort = (typeof SORTS)[number]
 
 export interface IssueFilters {
@@ -149,3 +149,9 @@ export const MUTES: { key: string; change: ChangeIssue }[] = [
   { key: 'events100', change: { action: 'mute', mute_events: 100 } },
   { key: 'forever', change: { action: 'mute' } },
 ]
+
+/** A search of the issue list for one value of a tag. */
+export function tagSearch(key: string, value: string): string {
+  const plain = value.replaceAll('"', '')
+  return /\s/.test(plain) ? `${key}:"${plain}"` : `${key}:${plain}`
+}

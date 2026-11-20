@@ -22,7 +22,7 @@ pub use ingest::{IngestEvent, IngestedEvent};
 use ports::{EventStore, IssueRepository};
 pub use queries::{
     EventsOfTrace, GetEvent, GetIssue, IssueDetail, ListEvents, ListIssues, ReleasesErrors, SummarizeTags,
-    TAG_SAMPLE, TagSummary, TagValue,
+    TagSummary, TagValue,
 };
 
 #[derive(Debug, thiserror::Error)]

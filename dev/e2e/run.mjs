@@ -225,6 +225,18 @@ async function main() {
       `trace logs: ${JSON.stringify(trace.logs.map((l) => l.message))}`,
     )
   })
+  await check('an issue counts its events’ tags and is found by them', async () => {
+    const summary = await logdock.get(`/api/v1/issues/${failed.issue.id}/tags`)
+    const tag = (key) => summary.find((t) => t.key === key)
+    const url = tag('url')?.values[0]?.value ?? ''
+    expect(url.includes('/scenario/'), `url tag ${JSON.stringify(summary)}`)
+    expect(tag('runtime')?.values[0]?.value.startsWith('php'), 'no runtime tag')
+    const transaction = tag('transaction')?.values[0]?.value
+    const q = encodeURIComponent(`transaction:"${transaction}" Payment`)
+    const found = await logdock.get(`/api/v1/issues?project=${project.id}&status=all&q=${q}`)
+    expect(found.some((i) => i.id === failed.issue.id), `not found by transaction:${transaction}`)
+    return `${summary.length} tags, ${failed.users} users`
+  })
   await check('a reported, handled exception becomes an issue', async () => {
     const issue = await issueTitled('Coupon')
     return issue.title

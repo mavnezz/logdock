@@ -236,6 +236,10 @@ impl Server {
                 if let Some(latest) = detail.get_mut("latest") {
                     trim_event(latest);
                 }
+                let tags = self.get(&format!("/issues/{id}/tags"), &[]).await?;
+                if let Some(detail) = detail.as_object_mut() {
+                    detail.insert("tag_summary".into(), tags);
+                }
                 name_scopes(&mut detail, &projects);
                 Ok(compact(detail))
             }
@@ -632,8 +636,14 @@ fn read_tools() -> Vec<Value> {
 
     let mut issues = scope_properties();
     issues.insert("status".into(), json!({"type": "string", "enum": ["unresolved", "resolved", "muted", "all"], "description": "unresolved by default."}));
-    issues.insert("query".into(), json!({"type": "string", "description": "Words in the title or culprit."}));
-    issues.insert("sort".into(), json!({"type": "string", "enum": ["last_seen", "first_seen", "count"]}));
+    issues.insert(
+        "query".into(),
+        json!({"type": "string", "description": "Words in the title or culprit, and tags of the issue's events: user.email:ada@example.com, user:id:42, url:\"https://shop/cart\", transaction:/orders* (a prefix), browser:\"Chrome 131\", release:v2, !handled:yes (without it), or a tag of the app's own."}),
+    );
+    issues.insert(
+        "sort".into(),
+        json!({"type": "string", "enum": ["last_seen", "first_seen", "count", "users"], "description": "users: the users affected, most first."}),
+    );
     issues.insert("limit".into(), json!({"type": "integer", "description": "25 by default, at most 100."}));
     issues.insert("offset".into(), json!({"type": "integer"}));
 
@@ -675,14 +685,14 @@ fn read_tools() -> Vec<Value> {
         tool(
             "list_issues",
             "List issues",
-            "Errors grouped into issues: title, culprit, how often, first and last seen, status and releases.",
+            "Errors grouped into issues: title, culprit, how often, the users affected, first and last seen, status and releases. Search by tag to find a user's issues or those of one URL or browser.",
             issues,
             &[],
         ),
         tool(
             "get_issue",
             "Show an issue",
-            "One issue with its latest event: the exception chain, stack frames (the app's own with their code), the request, tags, breadcrumbs and trace ID.",
+            "One issue with its latest event: the exception chain, stack frames (the app's own with their code), the request, tags, breadcrumbs and trace ID; and over all its events the users affected and each tag's most frequent values (tag_summary).",
             id,
             &["id"],
         ),

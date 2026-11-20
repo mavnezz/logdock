@@ -6,9 +6,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use logdock_issues::application::ports::{
     EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount,
-    ReleaseErrors, StoredEvent,
+    ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
-use logdock_issues::domain::{ErrorEvent, EventLevel, Issue, IssueId, IssueStatus, NewIssue};
+use logdock_issues::domain::{
+    ErrorEvent, EventLevel, Issue, IssueId, IssueStatus, NewIssue, USER, tags_of, values_kept,
+};
 use logdock_kernel::{Day, EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
 use logdock_retention::domain::Kind;
 use sqlx::sqlite::SqliteRow;
@@ -172,7 +174,9 @@ impl IssueRepository for SqliteIssues {
             "(SELECT coalesce(sum(h.count), 0) FROM issue_hours h WHERE h.issue_id = i.id AND h.hour >= ",
         )
         .push_bind(since.hour())
-        .push(") AS last_day FROM issues i WHERE 1 = 1");
+        .push(") AS last_day, coalesce((SELECT k.distinct_values FROM issue_tag_keys k WHERE k.issue_id = i.id AND k.key = ")
+        .push_bind(USER)
+        .push("), 0) AS users FROM issues i WHERE 1 = 1");
         if !query.projects.is_empty() {
             sql.push(" AND i.project_id IN (");
             let mut list = sql.separated(", ");
@@ -202,10 +206,22 @@ impl IssueRepository for SqliteIssues {
                 sql.push(" OR i.culprit LIKE ").push_bind(pattern).push(" ESCAPE '\\')");
             }
         }
+        for tag in &query.tags {
+            sql.push(if tag.negated { " AND NOT EXISTS" } else { " AND EXISTS" });
+            sql.push(" (SELECT 1 FROM issue_tags t WHERE t.issue_id = i.id AND t.key = ")
+                .push_bind(tag.key.clone());
+            if tag.prefix {
+                sql.push(" AND substr(t.value, 1, ").push_bind(tag.value.chars().count() as i64).push(") = ");
+            } else {
+                sql.push(" AND t.value = ");
+            }
+            sql.push_bind(tag.value.clone()).push(")");
+        }
         sql.push(match query.sort {
             IssueSort::LastSeen => " ORDER BY i.last_seen DESC",
             IssueSort::FirstSeen => " ORDER BY i.first_seen DESC",
             IssueSort::Count => " ORDER BY i.count DESC",
+            IssueSort::Users => " ORDER BY users DESC, i.last_seen DESC",
         });
         sql.push(" LIMIT ")
             .push_bind(i64::from(query.limit))
@@ -214,7 +230,11 @@ impl IssueRepository for SqliteIssues {
         let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
         Ok(rows
             .iter()
-            .map(|row| IssueSummary { issue: issue(row), last_day: row.get::<i64, _>("last_day") as u64 })
+            .map(|row| IssueSummary {
+                issue: issue(row),
+                last_day: row.get::<i64, _>("last_day") as u64,
+                users: row.get::<i64, _>("users") as u64,
+            })
             .collect())
     }
 
@@ -227,8 +247,15 @@ impl IssueRepository for SqliteIssues {
         Ok(())
     }
 
-    async fn record(&self, id: IssueId, at: Timestamp, release: Option<&str>) -> Result<(), PortError> {
+    async fn record(
+        &self,
+        id: IssueId,
+        at: Timestamp,
+        release: Option<&str>,
+        tags: &[(String, String)],
+    ) -> Result<(), PortError> {
         let mut tx = self.db.write().await.map_err(port)?;
+        add_tags(&mut tx, id.get(), at, tags).await.map_err(port)?;
         sqlx::query(
             "INSERT INTO issue_hours (issue_id, hour, count) VALUES (?, ?, 1) \
              ON CONFLICT (issue_id, hour) DO UPDATE SET count = count + 1",
@@ -252,6 +279,38 @@ impl IssueRepository for SqliteIssues {
             .map_err(port)?;
         }
         tx.commit().await.map_err(port)
+    }
+
+    async fn tag_keys(&self, id: IssueId) -> Result<Vec<TagKey>, PortError> {
+        let rows = sqlx::query("SELECT key, events, distinct_values FROM issue_tag_keys WHERE issue_id = ?")
+            .bind(id.get())
+            .fetch_all(self.db.pool())
+            .await
+            .map_err(port)?;
+        Ok(rows
+            .iter()
+            .map(|row| TagKey {
+                key: row.get("key"),
+                events: row.get::<i64, _>("events") as u64,
+                values: row.get::<i64, _>("distinct_values") as u32,
+            })
+            .collect())
+    }
+
+    async fn tag_values(&self, id: IssueId, key: &str, limit: u32) -> Result<Vec<TagCount>, PortError> {
+        let rows = sqlx::query(
+            "SELECT value, count FROM issue_tags WHERE issue_id = ? AND key = ? ORDER BY count DESC, value LIMIT ?",
+        )
+        .bind(id.get())
+        .bind(key)
+        .bind(i64::from(limit))
+        .fetch_all(self.db.pool())
+        .await
+        .map_err(port)?;
+        Ok(rows
+            .iter()
+            .map(|row| TagCount { value: row.get("value"), count: row.get::<i64, _>("count") as u64 })
+            .collect())
     }
 
     async fn hours(&self, id: IssueId, from: Timestamp, to: Timestamp) -> Result<Vec<(i64, u64)>, PortError> {
@@ -345,6 +404,143 @@ impl IssueRepository for SqliteIssues {
             .map_err(port)?;
         Ok(text.flatten().as_deref().and_then(value_of))
     }
+}
+
+/// Counts one event's tags for its issue. A value not kept yet is kept
+/// while the issue has fewer than [`values_kept`] of the tag.
+async fn add_tags(
+    tx: &mut SqliteConnection,
+    issue: i64,
+    at: Timestamp,
+    tags: &[(String, String)],
+) -> Result<(), sqlx::Error> {
+    for (key, value) in tags {
+        let kept: i64 = sqlx::query_scalar(
+            "INSERT INTO issue_tag_keys (issue_id, key, events, distinct_values) VALUES (?, ?, 1, 0) \
+             ON CONFLICT (issue_id, key) DO UPDATE SET events = events + 1 RETURNING distinct_values",
+        )
+        .bind(issue)
+        .bind(key)
+        .fetch_one(&mut *tx)
+        .await?;
+        let counted = sqlx::query(
+            "UPDATE issue_tags SET count = count + 1, first_seen = min(first_seen, ?1), \
+             last_seen = max(last_seen, ?1) WHERE issue_id = ?2 AND key = ?3 AND value = ?4",
+        )
+        .bind(at.unix_micros())
+        .bind(issue)
+        .bind(key)
+        .bind(value)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if counted == 0 && kept < i64::from(values_kept(key)) {
+            sqlx::query(
+                "INSERT INTO issue_tags (issue_id, key, value, count, first_seen, last_seen) VALUES (?1, ?2, ?3, 1, ?4, ?4)",
+            )
+            .bind(issue)
+            .bind(key)
+            .bind(value)
+            .bind(at.unix_micros())
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query("UPDATE issue_tag_keys SET distinct_values = distinct_values + 1 WHERE issue_id = ? AND key = ?")
+                .bind(issue)
+                .bind(key)
+                .execute(&mut *tx)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Where [`backfill_tags`] got to, in the setting migration 0009 made.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct Backfill {
+    /// Events received before this (Unix microseconds) were not counted.
+    since: i64,
+    /// The segment's day and the last event's row in it.
+    day: i64,
+    id: i64,
+}
+
+const BACKFILL: &str = "issue_tags_backfill";
+const BACKFILL_BATCH: i64 = 500;
+
+/// Counts the tags of the events received before tags were counted, once:
+/// segment by segment, oldest first, in batches whose place is saved with
+/// them, so a restart goes on where it stopped. Returns the events counted.
+pub async fn backfill_tags(db: &Database, segments: &Segments) -> Result<u64, PortError> {
+    let state: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(BACKFILL)
+        .fetch_optional(db.pool())
+        .await
+        .map_err(port)?;
+    let Some(mut state) = state.and_then(|json| serde_json::from_str::<Backfill>(&json).ok()) else {
+        return Ok(0);
+    };
+    let mut counted = 0;
+    let mut days: Vec<Day> =
+        segments.all().await?.into_iter().filter(|s| s.kind == Kind::Events).map(|s| s.day).collect();
+    days.retain(|day| day.days() >= state.day && *day <= Timestamp::from_unix_micros(state.since).day());
+    days.sort();
+    for day in days {
+        if day.days() > state.day {
+            state.day = day.days();
+            state.id = 0;
+        }
+        let Some(pool) = segments.reader(Kind::Events, day).await? else { continue };
+        loop {
+            let rows = sqlx::query(
+                "SELECT id, issue_id, time, data FROM events WHERE id > ? AND received < ? ORDER BY id LIMIT ?",
+            )
+            .bind(state.id)
+            .bind(state.since)
+            .bind(BACKFILL_BATCH)
+            .fetch_all(&pool)
+            .await
+            .map_err(port)?;
+            let Some(last) = rows.last() else { break };
+            state.id = last.get("id");
+            let mut tx = db.write().await.map_err(port)?;
+            for row in &rows {
+                let issue: i64 = row.get("issue_id");
+                let exists: Option<i64> = sqlx::query_scalar("SELECT id FROM issues WHERE id = ?")
+                    .bind(issue)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(port)?;
+                let data: Vec<u8> = row.get("data");
+                let (Some(_), Some(payload)) = (exists, unpacked(&data)) else { continue };
+                let tags = tags_of(&ErrorEvent::from_payload(payload, None));
+                add_tags(&mut tx, issue, Timestamp::from_unix_micros(row.get("time")), &tags)
+                    .await
+                    .map_err(port)?;
+                counted += 1;
+            }
+            save_backfill(&mut tx, &state).await?;
+            tx.commit().await.map_err(port)?;
+            if (rows.len() as i64) < BACKFILL_BATCH {
+                break;
+            }
+        }
+    }
+    sqlx::query("DELETE FROM settings WHERE key = ?")
+        .bind(BACKFILL)
+        .execute(db.pool())
+        .await
+        .map_err(port)?;
+    Ok(counted)
+}
+
+async fn save_backfill(tx: &mut SqliteConnection, state: &Backfill) -> Result<(), PortError> {
+    sqlx::query("UPDATE settings SET value = ? WHERE key = ?")
+        .bind(serde_json::to_string(state).map_err(port)?)
+        .bind(BACKFILL)
+        .execute(&mut *tx)
+        .await
+        .map_err(port)?;
+    Ok(())
 }
 
 /// [`EventStore`] over the events' day segments.
@@ -555,6 +751,7 @@ impl EventStore for SegmentEvents {
 
 #[cfg(test)]
 mod tests {
+    use logdock_issues::domain::{MAX_TAG_VALUES, TagFilter};
     use logdock_kernel::redaction::RedactionRules;
 
     use super::*;
@@ -616,9 +813,13 @@ mod tests {
         let latest = issues.latest_event(issue.id).await.unwrap().unwrap();
         assert_eq!(latest.get("release").and_then(Value::as_str), Some("r2"), "kept when saved without one");
 
-        issues.record(issue.id, at, Some("r1")).await.unwrap();
-        issues.record(issue.id, at, Some("r2")).await.unwrap();
-        issues.record(issue.id, at.saturating_add(std::time::Duration::from_secs(3600)), None).await.unwrap();
+        let tags = |user: &str| {
+            vec![("user".to_owned(), user.to_owned()), ("url".to_owned(), "https://shop/a b".to_owned())]
+        };
+        issues.record(issue.id, at, Some("r1"), &tags("id:1")).await.unwrap();
+        issues.record(issue.id, at, Some("r2"), &tags("id:2")).await.unwrap();
+        let later = at.saturating_add(std::time::Duration::from_secs(3600));
+        issues.record(issue.id, later, None, &tags("id:1")).await.unwrap();
         let hours = issues
             .hours(
                 issue.id,
@@ -654,6 +855,46 @@ mod tests {
                 .is_empty()
         );
 
+        // Tags: the users affected, the values, searching by them.
+        let keys = issues.tag_keys(issue.id).await.unwrap();
+        let user = keys.iter().find(|k| k.key == "user").unwrap();
+        assert_eq!((user.events, user.values), (3, 2));
+        let values = issues.tag_values(issue.id, "user", 10).await.unwrap();
+        assert_eq!(
+            values,
+            [TagCount { value: "id:1".into(), count: 2 }, TagCount { value: "id:2".into(), count: 1 }]
+        );
+        assert_eq!(issues.tag_values(issue.id, "user", 1).await.unwrap().len(), 1);
+        let by = |tags: Vec<TagFilter>| IssueQuery { limit: 10, tags, ..Default::default() };
+        let tag = |key: &str, value: &str, prefix: bool, negated: bool| TagFilter {
+            key: key.into(),
+            value: value.into(),
+            prefix,
+            negated,
+        };
+        let found = issues.list(&by(vec![tag("user", "id:2", false, false)]), at).await.unwrap();
+        assert_eq!((found.len(), found[0].users), (1, 2));
+        assert_eq!(
+            issues.list(&by(vec![tag("url", "https://shop/a", true, false)]), at).await.unwrap().len(),
+            1
+        );
+        assert!(
+            issues.list(&by(vec![tag("url", "https://shop/b", true, false)]), at).await.unwrap().is_empty()
+        );
+        assert!(issues.list(&by(vec![tag("user", "id:1", false, true)]), at).await.unwrap().is_empty());
+        assert_eq!(issues.list(&by(vec![tag("user", "id:9", false, true)]), at).await.unwrap().len(), 1);
+        let sorted = IssueQuery { limit: 10, sort: IssueSort::Users, ..Default::default() };
+        assert_eq!(issues.list(&sorted, at).await.unwrap()[0].users, 2);
+
+        // Values beyond the most kept are counted for the tag only.
+        let many: Vec<(String, String)> =
+            (0..=MAX_TAG_VALUES).map(|n| ("route".to_owned(), format!("/r/{n}"))).collect();
+        let mut tx = db.write().await.unwrap();
+        add_tags(&mut tx, issue.id.get(), at, &many).await.unwrap();
+        tx.commit().await.unwrap();
+        let route = issues.tag_keys(issue.id).await.unwrap().into_iter().find(|k| k.key == "route").unwrap();
+        assert_eq!((route.events, route.values), (u64::from(MAX_TAG_VALUES) + 1, MAX_TAG_VALUES));
+
         let segments = Arc::new(Segments::new(dir.path().join("segments"), db.clone()));
         let events = SegmentEvents::new(Arc::clone(&segments));
         let event = ErrorEvent::from_payload(payload("r2"), Some("E2"));
@@ -674,6 +915,15 @@ mod tests {
         assert!(events.get("nope").await.unwrap().is_none());
         assert_eq!(events.by_trace("t1").await.unwrap().len(), 2);
         events.close().await;
+
+        // The events from before tags were counted are counted once.
+        let before = issues.tag_keys(issue.id).await.unwrap();
+        let transactions =
+            |keys: &[TagKey]| keys.iter().find(|k| k.key == "transaction").map_or(0, |k| k.events);
+        assert_eq!(backfill_tags(&db, &segments).await.unwrap(), 2);
+        let after = issues.tag_keys(issue.id).await.unwrap();
+        assert_eq!(transactions(&after), transactions(&before) + 2);
+        assert_eq!(backfill_tags(&db, &segments).await.unwrap(), 0, "once");
 
         issues.delete(issue.id).await.unwrap();
         assert!(issues.get(issue.id).await.unwrap().is_none());

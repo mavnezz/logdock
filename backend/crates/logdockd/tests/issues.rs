@@ -183,6 +183,24 @@ async fn errors_become_issues_with_their_events_and_trace() {
     let release = tags.as_array().unwrap().iter().find(|t| t["key"] == "release").unwrap();
     assert_eq!(release["total"], 2);
 
+    // The users it affected, and finding it by its events' tags.
+    assert_eq!(detail["users"], 1);
+    assert_eq!(issue["users"], 1);
+    let user = &tags[0];
+    assert_eq!(user["key"], "user");
+    assert_eq!((user["distinct"].as_u64(), user["complete"].as_bool()), (Some(1), Some(true)));
+    assert_eq!(user["values"], json!([{"value": "id:17", "count": 2}]), "{tags}");
+    let found = |query: &str| {
+        let admin = &admin;
+        let path = format!("/api/v1/issues?{query}");
+        async move { admin.get(&path).await.json().as_array().unwrap().len() }
+    };
+    assert_eq!(found("q=user.email:customer@example.com").await, 1);
+    assert_eq!(found("q=url:https://orders.example.com/orders/42*%20PaymentFailed").await, 1);
+    assert_eq!(found("q=!user.id:17").await, 0);
+    assert_eq!(found("q=user.id:18").await, 0);
+    assert_eq!(found("sort=users").await, 1);
+
     let events = admin.get(&format!("/api/v1/issues/{id}/events")).await.json();
     assert_eq!(events.as_array().unwrap().len(), 2);
     assert_eq!(events[0]["service"], "web");

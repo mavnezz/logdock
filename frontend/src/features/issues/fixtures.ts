@@ -28,7 +28,7 @@ export function issue(overrides: Partial<Issue> = {}): Issue {
 }
 
 export function listed(overrides: Partial<IssueListItem> = {}): IssueListItem {
-  return { ...issue(overrides), last_day: 3, ...overrides }
+  return { ...issue(overrides), last_day: 3, users: 0, ...overrides }
 }
 
 export function event(overrides: Partial<ErrorEvent> = {}): ErrorEvent {

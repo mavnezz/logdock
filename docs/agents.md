@@ -48,8 +48,8 @@ Logdock available in every project instead of the current one.
 |---|---|
 | `list_projects` | projects and their stages; the names the other tools take |
 | `search_logs` | log entries, newest first: words, `"phrases"`, `key:value`, level, service, host, trace, `since` (15m, 6h, 2d, 1w) or `from`/`to` |
-| `list_issues` | issues by status, words, project and stage |
-| `get_issue` | an issue with its latest event: exception chain, frames (the app's with their code), request, tags, breadcrumbs, trace ID |
+| `list_issues` | issues by status, words, tags (`user.email:…`, `url:…`), project and stage; sorted by the users affected too |
+| `get_issue` | an issue with its latest event: exception chain, frames (the app's with their code), request, tags, breadcrumbs, trace ID; the users affected and each tag's most frequent values |
 | `get_event` | one error event by its event ID |
 | `get_trace` | everything of one trace ID across containers: transactions with spans, log entries, error events |
 | `performance` | requests, jobs, commands, SQL, outgoing requests or cache: count, failures, percentiles, total time |

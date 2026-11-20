@@ -74,6 +74,7 @@ const filters = computed<IssueFilters>(() => ({
 const issues = useIssues(filters)
 const list = computed(() => issues.data.value?.items ?? [])
 const events = (n: number) => t('issues.eventCount', { n: formatNumber(n) }, n)
+const users = (n: number) => t('issues.userCount', { n: formatNumber(n) }, n)
 const several = computed(() => scope.project === null)
 </script>
 
@@ -117,6 +118,7 @@ const several = computed(() => scope.project === null)
       </NativeSelect>
       <Button type="submit" variant="outline">{{ t('logs.searchButton') }}</Button>
     </form>
+    <p class="-mt-2 text-xs text-muted-foreground">{{ t('issues.searchTags') }}</p>
     <p v-if="release" class="flex items-center gap-2 text-sm">
       <Badge variant="secondary" class="font-mono">{{ t('issues.newIn', { release }) }}</Badge>
       <Button size="sm" variant="ghost" @click="update({ release: '' })">{{
@@ -137,11 +139,12 @@ const several = computed(() => scope.project === null)
     />
     <div v-else class="overflow-hidden rounded-lg border">
       <div
-        class="hidden grid-cols-[minmax(0,1fr)_5rem_5rem_8rem] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid"
+        class="hidden grid-cols-[minmax(0,1fr)_5rem_4.5rem_4.5rem_8rem] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid"
         aria-hidden="true"
       >
         <span>{{ t('issues.issue') }}</span>
         <span class="text-right">{{ t('issues.events') }}</span>
+        <span class="text-right">{{ t('issues.users') }}</span>
         <span class="text-right">{{ t('issues.lastDay') }}</span>
         <span class="text-right">{{ t('issues.lastSeen') }}</span>
       </div>
@@ -149,7 +152,7 @@ const several = computed(() => scope.project === null)
         <li
           v-for="issue in list"
           :key="issue.id"
-          class="grid gap-1 px-4 py-3 hover:bg-accent/50 md:grid-cols-[minmax(0,1fr)_5rem_5rem_8rem] md:items-center md:gap-3"
+          class="grid gap-1 px-4 py-3 hover:bg-accent/50 md:grid-cols-[minmax(0,1fr)_5rem_4.5rem_4.5rem_8rem] md:items-center md:gap-3"
         >
           <div class="grid min-w-0 gap-1">
             <div class="flex min-w-0 items-center gap-2">
@@ -177,14 +180,20 @@ const several = computed(() => scope.project === null)
                 t('issues.regressed')
               }}</Badge>
               <span class="md:hidden">
-                · {{ events(issue.count) }} ·
-                {{ formatRelative(issue.last_seen) }}
+                · {{ events(issue.count) }}
+                <template v-if="issue.users">· {{ users(issue.users) }}</template>
+                · {{ formatRelative(issue.last_seen) }}
               </span>
             </p>
           </div>
           <span class="hidden text-right text-sm tabular-nums md:block">{{
             formatNumber(issue.count)
           }}</span>
+          <span
+            class="hidden text-right text-sm tabular-nums md:block"
+            :class="issue.users === 0 && 'text-muted-foreground'"
+            >{{ issue.users ? formatNumber(issue.users) : '–' }}</span
+          >
           <span class="hidden text-right text-sm tabular-nums md:block">{{
             formatNumber(issue.last_day)
           }}</span>

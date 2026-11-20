@@ -212,5 +212,7 @@ services:
   the cookies' names, never their values. Not kept: the server's environment
   and the code around the lines of libraries (most of an event's size).
 - **The user** (ID, e-mail, IP address) comes with
-  `SENTRY_SEND_DEFAULT_PII=true` only; the issue's page shows it then. Without
-  it the SDK also leaves out the client's IP address and the cookies.
+  `SENTRY_SEND_DEFAULT_PII=true` only; the issue's page shows it then, with
+  the number of users affected, and the issues can be searched by user
+  (`user.email:ada@example.com`). Without it the SDK also leaves out the
+  client's IP address and the cookies.

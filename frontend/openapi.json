@@ -518,7 +518,7 @@
           {
             "name": "q",
             "in": "query",
-            "description": "Words in the title or culprit.",
+            "description": "Words in the title or culprit, and tags of its events:\n`user.email:ada@example.com`, `url:\"https://shop/cart\"`,\n`transaction:/orders*` (a prefix), `!browser:Safari` (without it).",
             "required": false,
             "schema": {
               "type": "string"
@@ -536,7 +536,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "`last_seen` (the default), `first_seen` or `count`.",
+            "description": "`last_seen` (the default), `first_seen`, `count` or `users`.",
             "required": false,
             "schema": {
               "type": "string"
@@ -789,7 +789,7 @@
         "tags": [
           "issues"
         ],
-        "summary": "Where an issue's recent events (the last 1,000) came from: release,\nroute or job, service and host, each value with how often.",
+        "summary": "What an issue's events had in common, from all its events: the users,\nroute or job, URL, release, browser, service, host and the app's own\ntags, each value with how often it came.",
         "operationId": "issue_tags",
         "parameters": [
           {
@@ -3679,7 +3679,8 @@
         "required": [
           "issue",
           "hours",
-          "releases"
+          "releases",
+          "users"
         ],
         "properties": {
           "hours": {
@@ -3708,6 +3709,12 @@
             "items": {
               "$ref": "#/components/schemas/ReleaseCount"
             }
+          },
+          "users": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The users affected.",
+            "minimum": 0
           }
         }
       },
@@ -3719,13 +3726,20 @@
           {
             "type": "object",
             "required": [
-              "last_day"
+              "last_day",
+              "users"
             ],
             "properties": {
               "last_day": {
                 "type": "integer",
                 "format": "int64",
                 "description": "Events in the last 24 hours.",
+                "minimum": 0
+              },
+              "users": {
+                "type": "integer",
+                "format": "int64",
+                "description": "The users affected: the different values of its events' `user` tag,\nwhich the SDK sends only with `send_default_pii`.",
                 "minimum": 0
               }
             }
@@ -4965,16 +4979,28 @@
         "required": [
           "key",
           "total",
+          "distinct",
+          "complete",
           "values"
         ],
         "properties": {
+          "complete": {
+            "type": "boolean",
+            "description": "False once an issue keeps no more values of the tag: there may be\nmore than `distinct`."
+          },
+          "distinct": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Different values; for `user`, the users affected.",
+            "minimum": 0
+          },
           "key": {
             "type": "string",
-            "description": "`release`, `transaction`, `service` or `host`."
+            "description": "`user`, `transaction`, `url`, `release`, `browser`, `client_os`,\n`service`, `host`, `server_name`, `handled`, `runtime`, or a tag of\nthe app's own."
           },
           "total": {
             "type": "integer",
-            "format": "int32",
+            "format": "int64",
             "description": "Events that had the tag.",
             "minimum": 0
           },
@@ -4996,7 +5022,7 @@
         "properties": {
           "count": {
             "type": "integer",
-            "format": "int32",
+            "format": "int64",
             "minimum": 0
           },
           "value": {

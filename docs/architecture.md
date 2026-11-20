@@ -304,8 +304,19 @@ Its state:
   wait for the mail server; a mail that fails is logged as a warning and not retried. The project's settings have a
   button that sends a test e-mail to the list.
 
-**Where it is shown.** The issue list filters by project, stage and status, and searches the title and the culprit;
-searching by tag is not built yet [Later]. An issue's page shows its events per four hours over 14 days, the latest
+**Tags and users.** Every event's tags are counted for its issue, as Sentry derives them: the SDK's own (`service`,
+`host`, the app's), `user` (`id:42`, else the e-mail, username or IP address) with `user.id`, `user.email`,
+`user.username` and `user.ip`, `transaction`, `url` (without the query), `release`, `browser` and `client_os` read from
+the request's user agent, `device`, `server_name`, `handled`, `mechanism`, `runtime` and `level`. Each value is kept
+with how many events had it, in `logdock.db`, so the counts outlive the events: up to 1,000 values per issue and tag
+(10,000 of `user`); further ones count for the tag, and the page says "at least". The users an issue affected are its
+`user` values; the SDK sends them only with `send_default_pii`. Events from before this was built are counted once,
+after the update's first start, in batches that survive a restart.
+
+**Where it is shown.** The issue list filters by project, stage and status, sorts by the users affected too, and
+searches the title and the culprit, and tags: `user.email:ada@example.com`, `url:"https://shop/cart"`,
+`transaction:/orders*` (a prefix), `!browser:Safari` (without it). An issue's page shows the users affected and each
+tag's ten most frequent values, each a link to the issues that had it; its events per four hours over 14 days, the latest
 event (or one picked from the recent ones) with its exception chain, frames (the app's own first, the others on
 request), request, breadcrumbs, tags and contexts, and everything else that carries the event's trace ID: log entries
 and other error events (`GET /api/v1/traces/<trace-id>`). Resolving and muting are open to every account and recorded

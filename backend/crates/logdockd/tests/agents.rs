@@ -211,6 +211,12 @@ async fn claude_reads_logs_issues_and_traces_through_mcp() {
     assert_eq!(frames[1]["context_line"], "throw new PaymentFailed($order);", "{issue}");
     assert!(frames[0].get("context_line").is_none(), "no code of libraries");
     assert!(issue.get("hours").is_none());
+    assert_eq!(issue["tag_summary"][0]["key"], "transaction", "{issue}");
+    let by_tag = json!({"query": "transaction:POST*", "sort": "users"});
+    let found = call(&app, &read, "list_issues", by_tag).await.unwrap();
+    assert_eq!(found[0]["id"], id, "{found}");
+    let none = call(&app, &read, "list_issues", json!({"query": "transaction:GET*"})).await.unwrap();
+    assert!(none.as_array().is_none_or(Vec::is_empty), "{none}");
     let event_id = issue["latest"]["event_id"].as_str().unwrap().to_owned();
     assert_eq!(
         call(&app, &read, "get_event", json!({"event_id": event_id})).await.unwrap()["event"]["level"],

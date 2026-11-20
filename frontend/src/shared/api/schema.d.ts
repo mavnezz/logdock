@@ -203,8 +203,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Where an issue's recent events (the last 1,000) came from: release,
-         *     route or job, service and host, each value with how often.
+         * What an issue's events had in common, from all its events: the users,
+         *     route or job, URL, release, browser, service, host and the app's own
+         *     tags, each value with how often it came.
          */
         get: operations["issue_tags"];
         put?: never;
@@ -1006,6 +1007,11 @@ export interface components {
             issue: components["schemas"]["Issue"];
             latest?: components["schemas"]["Event"] | null;
             releases: components["schemas"]["ReleaseCount"][];
+            /**
+             * Format: int64
+             * @description The users affected.
+             */
+            users: number;
         };
         IssueListItem: components["schemas"]["Issue"] & {
             /**
@@ -1013,6 +1019,12 @@ export interface components {
              * @description Events in the last 24 hours.
              */
             last_day: number;
+            /**
+             * Format: int64
+             * @description The users affected: the different values of its events' `user` tag,
+             *     which the SDK sends only with `send_default_pii`.
+             */
+            users: number;
         };
         Key: {
             created_at: string;
@@ -1414,10 +1426,24 @@ export interface components {
             version: string;
         };
         TagSummaryDto: {
-            /** @description `release`, `transaction`, `service` or `host`. */
-            key: string;
+            /**
+             * @description False once an issue keeps no more values of the tag: there may be
+             *     more than `distinct`.
+             */
+            complete: boolean;
             /**
              * Format: int32
+             * @description Different values; for `user`, the users affected.
+             */
+            distinct: number;
+            /**
+             * @description `user`, `transaction`, `url`, `release`, `browser`, `client_os`,
+             *     `service`, `host`, `server_name`, `handled`, `runtime`, or a tag of
+             *     the app's own.
+             */
+            key: string;
+            /**
+             * Format: int64
              * @description Events that had the tag.
              */
             total: number;
@@ -1425,7 +1451,7 @@ export interface components {
             values: components["schemas"]["TagValueDto"][];
         };
         TagValueDto: {
-            /** Format: int32 */
+            /** Format: int64 */
             count: number;
             value: string;
         };
@@ -1874,11 +1900,15 @@ export interface operations {
                 environment?: string;
                 /** @description `unresolved` (the default), `resolved`, `muted` or `all`. */
                 status?: string;
-                /** @description Words in the title or culprit. */
+                /**
+                 * @description Words in the title or culprit, and tags of its events:
+                 *     `user.email:ada@example.com`, `url:"https://shop/cart"`,
+                 *     `transaction:/orders*` (a prefix), `!browser:Safari` (without it).
+                 */
                 q?: string;
                 /** @description Only issues that first appeared in this release. */
                 release?: string;
-                /** @description `last_seen` (the default), `first_seen` or `count`. */
+                /** @description `last_seen` (the default), `first_seen`, `count` or `users`. */
                 sort?: string;
                 limit?: number;
                 offset?: number;

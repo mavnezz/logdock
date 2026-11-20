@@ -166,3 +166,44 @@ async fn tells_nobody_when_the_project_says_so_and_needs_an_event_id() {
     assert!(matches!(none, Err(IssueError::NoEventId)));
     assert!(t.use_cases.event.execute("missing").await.unwrap().is_none());
 }
+
+async fn search(t: &TestIssues, text: &str) -> Vec<ports::IssueSummary> {
+    let query = ports::IssueQuery { text: Some(text.into()), limit: 10, ..Default::default() };
+    t.use_cases.list.execute(query).await.unwrap()
+}
+
+#[tokio::test]
+async fn counts_the_users_affected_and_finds_issues_by_their_tags() {
+    let t = TestIssues::new();
+    let rules = RedactionRules::default();
+    let with_user = |id: i64| {
+        let Value::Object(mut fields) = payload() else { unreachable!() };
+        fields.retain(|(k, _)| k != "user");
+        fields.push(("user".into(), object(vec![("id", Value::Int(id))])));
+        Value::Object(fields)
+    };
+    for (n, user) in [7, 8, 7].into_iter().enumerate() {
+        let id = format!("u{n}");
+        t.use_cases.ingest.execute(scope(), &rules, &policy(), with_user(user), Some(&id)).await.unwrap();
+    }
+    let issue = crate::domain::IssueId::new(1);
+    assert_eq!(t.use_cases.get.execute(issue).await.unwrap().users, 2);
+
+    let tags = t.use_cases.tags.execute(issue).await.unwrap();
+    let keys: Vec<&str> = tags.iter().map(|t| t.key.as_str()).collect();
+    assert_eq!(keys[..4], ["user", "transaction", "url", "release"]);
+    assert!(!keys.contains(&"user.id") && !keys.contains(&"level"), "shown by another tag: {keys:?}");
+    let users = &tags[0];
+    assert_eq!((users.total, users.distinct, users.complete), (3, 2, true));
+    assert_eq!((users.values[0].value.as_str(), users.values[0].count), ("id:7", 2));
+    assert_eq!(tags[2].values[0].value, "https://shop.example.com/orders");
+
+    let found = search(&t, "user:id:8").await;
+    assert_eq!((found.len(), found[0].users), (1, 2));
+    assert!(search(&t, "user.id:9").await.is_empty());
+    assert_eq!(search(&t, "!user.id:9 QueryException").await.len(), 1);
+    assert_eq!(search(&t, "transaction:POST*").await.len(), 1);
+    assert!(search(&t, "transaction:GET*").await.is_empty());
+    let sorted = ports::IssueQuery { sort: ports::IssueSort::Users, limit: 10, ..Default::default() };
+    assert_eq!(t.use_cases.list.execute(sorted).await.unwrap()[0].users, 2);
+}

@@ -16,7 +16,7 @@ describe('the issues page', () => {
   it('lists issues and filters them through the URL', async () => {
     const api = stubApi({
       'GET /api/v1/issues': () => [
-        listed(),
+        listed({ users: 1234 }),
         listed({ id: 6, title: 'QueryException: Deadlock', status: 'muted', level: 'warning' }),
         listed({ id: 7, title: 'TimeoutException', regressed_at: '2026-11-18T09:00:00Z' }),
       ],
@@ -29,6 +29,9 @@ describe('the issues page', () => {
     expect(wrapper.text()).toContain('Muted')
     expect(wrapper.text()).toContain('came back')
     expect(wrapper.find('a[href="/issues/5"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('1,234')
+    expect(wrapper.text()).toContain('1,234 users')
+    expect(wrapper.text()).toContain('By tag:')
     const first = new URL(api.calls.find((c) => c.url.includes('/issues'))!.url)
     expect(first.searchParams.get('status')).toBe('unresolved')
 
@@ -40,10 +43,10 @@ describe('the issues page', () => {
     await wrapper.find('select[aria-label="Status"]').setValue('all')
     await flushPromises()
     expect(router.currentRoute.value.query.status).toBe('all')
-    await wrapper.find('select[aria-label="Order"]').setValue('count')
+    await wrapper.find('select[aria-label="Order"]').setValue('users')
     await flushPromises()
     const last = new URL(api.calls.at(-1)!.url)
-    expect(last.searchParams.get('sort')).toBe('count')
+    expect(last.searchParams.get('sort')).toBe('users')
     expect(last.searchParams.get('q')).toBe('payment')
   })
 
