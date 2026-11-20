@@ -6,6 +6,7 @@ pub(crate) mod logs;
 mod monitors;
 mod performance;
 mod projects;
+mod releases;
 mod system;
 mod tokens;
 mod traces;
@@ -24,6 +25,7 @@ pub(crate) fn v1() -> OpenApiRouter<ApiState> {
         .merge(issues::routes())
         .merge(traces::routes())
         .merge(performance::routes())
+        .merge(releases::routes())
         .merge(monitors::routes())
         .merge(system::routes())
         .merge(tokens::routes())

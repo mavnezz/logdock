@@ -6,8 +6,10 @@ Logs, errors and monitoring for Laravel apps in one self-hosted container. Every
 sends to Logdock, and one web interface searches across all of them.
 
 - **Logs:** Laravel's logs from all apps, containers and stages, with full-text search, filters and a live view.
-- **Errors:** exceptions grouped into issues, with their state across releases and e-mail on new and returning ones.
-- **Monitoring:** requests, jobs, queries, outgoing requests, cache and scheduled tasks.
+- **Errors:** exceptions grouped into issues, with their request as Sentry keeps it, the request's flow as a timeline,
+  their state across releases and e-mail on new and returning ones.
+- **Monitoring:** requests, jobs, queries, outgoing requests, cache, queues, releases and scheduled tasks; N+1 queries,
+  slow queries and requests over their threshold become issues.
 - **Other logs:** Nginx's and other containers' output through Vector or Fluent Bit, and a buffered mode for Laravel's
   logs.
 - **For Claude and scripts:** API tokens that read (and, if wanted, triage issues), and an MCP server at `/mcp`.

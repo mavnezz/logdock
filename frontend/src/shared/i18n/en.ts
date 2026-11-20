@@ -22,6 +22,7 @@ const en = {
     older: 'Older',
   },
   nav: {
+    releases: 'Releases',
     queues: 'Queues',
     menu: 'Menu',
     logs: 'Logs',
@@ -104,6 +105,21 @@ const en = {
       groups: { debug: 'Debug', info: 'Info', warn: 'Warning', error: 'Error' },
     },
   },
+  releases: {
+    title: 'Releases',
+    description:
+      'What each release brought: its requests, how many failed and how fast they were, its errors and the issues that first appeared in it, against the release before.',
+    empty: 'No release yet',
+    emptyHint:
+      'Releases appear with the errors and measured requests that carry them (SENTRY_RELEASE).',
+    release: 'Release',
+    firstSeen: 'First seen',
+    requests: 'Requests',
+    failed: 'Failed',
+    errors: 'Errors',
+    newIssues: 'New issues',
+    againstBefore: 'Against the release before',
+  },
   queues: {
     title: 'Queues',
     description:
@@ -154,6 +170,8 @@ const en = {
     },
   },
   issues: {
+    newIn: 'New in {release}',
+    clearRelease: 'Show all releases',
     flow: 'What the request did',
     flowMissing:
       'No flow: this request was not measured. Tracing (SENTRY_TRACES_SAMPLE_RATE) is off or sampled it out.',

@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use logdock_issues::application::ports::{
-    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount, StoredEvent,
+    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount,
+    ReleaseErrors, StoredEvent,
 };
 use logdock_issues::domain::{ErrorEvent, EventLevel, Issue, IssueId, IssueStatus, NewIssue};
 use logdock_kernel::{Day, EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
@@ -191,6 +192,9 @@ impl IssueRepository for SqliteIssues {
         if let Some(status) = &query.status {
             sql.push(" AND i.status = ").push_bind(status.clone());
         }
+        if let Some(release) = &query.first_release {
+            sql.push(" AND i.first_release = ").push_bind(release.clone());
+        }
         if let Some(text) = query.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
             for word in text.split_whitespace() {
                 let pattern = format!("%{}%", word.replace('%', "\\%").replace('_', "\\_"));
@@ -261,6 +265,58 @@ impl IssueRepository for SqliteIssues {
         .await
         .map_err(port)?;
         Ok(rows.iter().map(|r| (r.get("hour"), r.get::<i64, _>("count") as u64)).collect())
+    }
+
+    async fn errors_by_release(
+        &self,
+        projects: &[ProjectId],
+        environments: &[EnvironmentId],
+        limit: u32,
+    ) -> Result<Vec<ReleaseErrors>, PortError> {
+        // The scopes' filter, for the issues joined and those counted as new.
+        fn scope(
+            sql: &mut QueryBuilder<Sqlite>,
+            alias: &str,
+            projects: &[ProjectId],
+            environments: &[EnvironmentId],
+        ) {
+            if !projects.is_empty() {
+                sql.push(format!(" AND {alias}.project_id IN ("));
+                let mut list = sql.separated(", ");
+                for project in projects {
+                    list.push_bind(project.get());
+                }
+                list.push_unseparated(")");
+            }
+            if !environments.is_empty() {
+                sql.push(format!(" AND {alias}.environment_id IN ("));
+                let mut list = sql.separated(", ");
+                for environment in environments {
+                    list.push_bind(environment.get());
+                }
+                list.push_unseparated(")");
+            }
+        }
+        let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new(
+            "SELECT r.release, sum(r.count) AS events, count(*) AS issues, min(r.first_seen) AS first_seen, \
+             max(r.last_seen) AS last_seen, (SELECT count(*) FROM issues n WHERE n.first_release = r.release",
+        );
+        scope(&mut sql, "n", projects, environments);
+        sql.push(") AS new_issues FROM issue_releases r JOIN issues i ON i.id = r.issue_id WHERE 1 = 1");
+        scope(&mut sql, "i", projects, environments);
+        sql.push(" GROUP BY r.release ORDER BY last_seen DESC LIMIT ").push_bind(i64::from(limit));
+        let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
+        Ok(rows
+            .iter()
+            .map(|r| ReleaseErrors {
+                release: r.get("release"),
+                events: r.get::<i64, _>("events").max(0) as u64,
+                issues: r.get::<i64, _>("issues").max(0) as u64,
+                new_issues: r.get::<i64, _>("new_issues").max(0) as u64,
+                first_seen: Timestamp::from_unix_micros(r.get("first_seen")),
+                last_seen: Timestamp::from_unix_micros(r.get("last_seen")),
+            })
+            .collect())
     }
 
     async fn releases(&self, id: IssueId) -> Result<Vec<ReleaseCount>, PortError> {

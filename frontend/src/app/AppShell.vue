@@ -9,6 +9,7 @@ import {
   Menu,
   ScrollText,
   ShieldCheck,
+  Tag,
   type LucideIcon,
   UserRound,
   Users,
@@ -39,6 +40,7 @@ const icons: Record<string, LucideIcon> = {
   issues: Bug,
   performance: Activity,
   queues: Layers,
+  releases: Tag,
   monitors: CalendarClock,
 }
 

@@ -192,6 +192,9 @@ services:
 - **What is measured** per request: the request itself, its SQL statements
   (with their values replaced), outgoing HTTP requests by host, and cache
   operations; a queued job continues the trace of the request that queued it.
+- **Releases** come from `SENTRY_RELEASE`: the *Releases* page shows each
+  with its requests (count, failures, p95), its errors and the issues that
+  first appeared in it, against the release before.
 - **Queues**: a job measured with tracing counts under its queue
   (`messaging.destination.name`): how long it waited from being queued to
   running, how long it ran, whether it failed or was a retry; the requests

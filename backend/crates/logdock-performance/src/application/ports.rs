@@ -31,6 +31,10 @@ pub trait RollupStore: Send + Sync {
     /// Every name of the query's kind, added up over its range.
     async fn names(&self, query: &RollupQuery) -> Result<Vec<(String, Rollup)>, PortError>;
 
+    /// Every name of the query's kind with its first and last minute (Unix
+    /// seconds) in the range.
+    async fn extents(&self, query: &RollupQuery) -> Result<Vec<(String, i64, i64)>, PortError>;
+
     /// One name over time: (Unix seconds of the bucket's start, rollup) for
     /// every bucket of `bucket_seconds` that has any.
     async fn series(

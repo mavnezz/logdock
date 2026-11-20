@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use logdock_kernel::Timestamp;
 
-use super::ports::{EventSummary, IssueQuery, IssueSummary, ReleaseCount, StoredEvent};
+use super::ports::{EventSummary, IssueQuery, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent};
 use super::{Context, IssueError, hours_ago};
 use crate::domain::{ErrorEvent, Issue, IssueId};
 
@@ -75,6 +75,22 @@ impl ListEvents {
         limit: u32,
     ) -> Result<Vec<EventSummary>, IssueError> {
         Ok(self.context.ports.events.list(id, before, limit.clamp(1, 100)).await?)
+    }
+}
+
+/// Query: what each release brought in errors, last seen first.
+#[derive(Clone)]
+pub struct ReleasesErrors {
+    pub(crate) context: Arc<Context>,
+}
+
+impl ReleasesErrors {
+    pub async fn execute(
+        &self,
+        projects: &[logdock_kernel::ProjectId],
+        environments: &[logdock_kernel::EnvironmentId],
+    ) -> Result<Vec<ReleaseErrors>, IssueError> {
+        Ok(self.context.ports.issues.errors_by_release(projects, environments, 200).await?)
     }
 }
 

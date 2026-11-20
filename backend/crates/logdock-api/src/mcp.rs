@@ -37,7 +37,7 @@ search_logs searches log entries (words, \"phrases\", key:value attributes, trac
 list_issues and get_issue show errors grouped into issues, with stack traces and the request; \
 get_trace shows everything that carries one trace ID, across containers (the request, the jobs it \
 queued, their logs and errors); performance shows where requests, jobs, queries and outgoing \
-requests spend their time; list_queues shows how long queued jobs wait and run; list_monitors \
+requests spend their time; list_queues shows how long queued jobs wait and run; list_releases compares releases; list_monitors \
 shows scheduled tasks. Times are UTC; `since` takes \
 15m, 6h, 2d or 1w.";
 
@@ -266,6 +266,11 @@ impl Server {
                 }
                 query.push(("limit", limit(args, 20, 100)));
                 Ok(compact(self.get("/performance", &query).await?))
+            }
+            "list_releases" => {
+                let projects = self.projects().await?;
+                let query = scope(args, &projects)?;
+                Ok(compact(self.get("/releases", &query).await?))
             }
             "list_queues" => {
                 let projects = self.projects().await?;
@@ -700,6 +705,13 @@ fn read_tools() -> Vec<Value> {
             "Where time goes",
             "Requests, jobs, commands, SQL statements, outgoing requests or cache operations over a range (24 hours by default): count, failures, p50, p95, p99 and total time.",
             performance,
+            &[],
+        ),
+        tool(
+            "list_releases",
+            "Releases",
+            "Releases, newest first: their requests (count, failures, p95), error events, and the issues that first appeared in each. list_issues takes no release; get_issue shows an issue's first and last release.",
+            scope_properties(),
             &[],
         ),
         tool(

@@ -112,6 +112,8 @@ pub struct IssueFilters {
     pub status: Option<String>,
     /// Words in the title or culprit.
     pub q: Option<String>,
+    /// Only issues that first appeared in this release.
+    pub release: Option<String>,
     /// `last_seen` (the default), `first_seen` or `count`.
     pub sort: Option<String>,
     pub limit: Option<u32>,
@@ -149,6 +151,7 @@ async fn list_issues(
         environments: ids(&filters.environment)?.into_iter().map(EnvironmentId::new).collect(),
         status,
         text: filters.q,
+        first_release: filters.release.filter(|r| !r.trim().is_empty()),
         sort,
         limit: filters.limit.unwrap_or(50),
         offset: filters.offset.unwrap_or(0),

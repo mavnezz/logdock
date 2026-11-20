@@ -22,6 +22,8 @@ pub struct IssueQuery {
     pub status: Option<String>,
     /// Words that appear in the title or culprit.
     pub text: Option<String>,
+    /// Issues that first appeared in this release.
+    pub first_release: Option<String>,
     pub sort: IssueSort,
     pub limit: u32,
     pub offset: u32,
@@ -38,6 +40,20 @@ pub struct IssueSummary {
 pub struct ReleaseCount {
     pub release: String,
     pub count: u64,
+    pub first_seen: Timestamp,
+    pub last_seen: Timestamp,
+}
+
+/// What one release brought in errors, over every issue of the scopes asked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseErrors {
+    pub release: String,
+    /// Error events in this release.
+    pub events: u64,
+    /// Issues with events in it.
+    pub issues: u64,
+    /// Issues that first appeared in it.
+    pub new_issues: u64,
     pub first_seen: Timestamp,
     pub last_seen: Timestamp,
 }
@@ -66,6 +82,15 @@ pub trait IssueRepository: Send + Sync {
     async fn hours(&self, id: IssueId, from: Timestamp, to: Timestamp) -> Result<Vec<(i64, u64)>, PortError>;
 
     async fn releases(&self, id: IssueId) -> Result<Vec<ReleaseCount>, PortError>;
+
+    /// Errors per release, last seen first, of the issues in `projects` and
+    /// `environments` (all when empty); at most `limit` releases.
+    async fn errors_by_release(
+        &self,
+        projects: &[ProjectId],
+        environments: &[EnvironmentId],
+        limit: u32,
+    ) -> Result<Vec<ReleaseErrors>, PortError>;
 
     async fn latest_event(&self, id: IssueId) -> Result<Option<Value>, PortError>;
 }

@@ -85,6 +85,25 @@ describe('the issues page', () => {
     expect(router.currentRoute.value.query).toEqual({ status: 'all' })
   })
 
+  it('shows the issues new in a release, and all again', async () => {
+    const api = stubApi({
+      'GET /api/v1/issues': () => [listed()],
+      'GET /api/v1/projects': () => [project()],
+    })
+    const { wrapper, router } = mountWith(IssuesPage, {
+      path: '/issues?status=all&release=1.1',
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('New in 1.1')
+    expect(new URL(api.calls.at(-1)!.url).searchParams.get('release')).toBe('1.1')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Show all releases')!
+      .trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ status: 'all' })
+  })
+
   it('says when nothing is open', async () => {
     stubApi({ 'GET /api/v1/issues': () => [], 'GET /api/v1/projects': () => [] })
     const { wrapper } = mountWith(IssuesPage, { path: '/issues' })

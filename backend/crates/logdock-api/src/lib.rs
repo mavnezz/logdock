@@ -51,6 +51,7 @@ pub const API_V1: &str = "/api/v1";
         (name = "traces", description = "Everything that carries one trace ID"),
         (name = "performance", description = "Requests, jobs, commands, queries, outgoing requests and cache over time"),
         (name = "monitors", description = "Scheduled tasks by their check-ins"),
+        (name = "releases", description = "What each release brought in errors and how its requests did"),
     ),
     modifiers(&SessionSecurity)
 )]

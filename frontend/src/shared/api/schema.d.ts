@@ -611,6 +611,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Releases, newest first: errors, new issues and requests of each. */
+        get: operations["releases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup": {
         parameters: {
             query?: never;
@@ -1210,6 +1227,24 @@ export interface components {
             extra_keys?: string[];
             scrub_emails?: boolean;
             scrub_ip_addresses?: boolean;
+        };
+        Release: {
+            /**
+             * Format: int64
+             * @description Error events in it, the issues they belong to, and the issues that
+             *     first appeared in it.
+             */
+            events: number;
+            /** @description When its first and last error or request was seen. */
+            first_seen: string;
+            /** Format: int64 */
+            issues: number;
+            last_seen: string;
+            /** Format: int64 */
+            new_issues: number;
+            /** @description As the SDK sends it (`SENTRY_RELEASE`). */
+            release: string;
+            requests?: components["schemas"]["Stats"] | null;
         };
         ReleaseCount: {
             /** Format: int64 */
@@ -1841,6 +1876,8 @@ export interface operations {
                 status?: string;
                 /** @description Words in the title or culprit. */
                 q?: string;
+                /** @description Only issues that first appeared in this release. */
+                release?: string;
                 /** @description `last_seen` (the default), `first_seen` or `count`. */
                 sort?: string;
                 limit?: number;
@@ -2963,6 +3000,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    releases: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Release"][];
                 };
             };
         };

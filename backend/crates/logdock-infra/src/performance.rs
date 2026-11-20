@@ -164,6 +164,16 @@ impl RollupStore for SqliteRollups {
         Ok(rows.iter().map(|row| (row.get("name"), rollup(row))).collect())
     }
 
+    async fn extents(&self, query: &RollupQuery) -> Result<Vec<(String, i64, i64)>, PortError> {
+        self.flush().await?;
+        let mut sql: QueryBuilder<Sqlite> =
+            QueryBuilder::new("SELECT name, min(minute) AS first, max(minute) AS last FROM perf_rollups");
+        Self::filtered(&mut sql, query);
+        sql.push(" GROUP BY name");
+        let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
+        Ok(rows.iter().map(|row| (row.get("name"), row.get("first"), row.get("last"))).collect())
+    }
+
     async fn series(
         &self,
         query: &RollupQuery,

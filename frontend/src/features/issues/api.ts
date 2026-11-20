@@ -24,6 +24,8 @@ export interface IssueFilters {
   status: StatusFilter
   sort: Sort
   q: string
+  /** Only issues that first appeared in this release. */
+  release: string
   /** From 1. */
   page: number
 }
@@ -46,6 +48,7 @@ export function useIssues(filters: MaybeRefOrGetter<IssueFilters>) {
       if (f.project !== null) query.project = String(f.project)
       if (f.environment !== null) query.environment = String(f.environment)
       if (f.q.trim()) query.q = f.q.trim()
+      if (f.release) query.release = f.release
       const items = await unwrap(api.GET('/api/v1/issues', { params: { query } }))
       return { items: items.slice(0, PAGE_SIZE), hasNext: items.length > PAGE_SIZE }
     },

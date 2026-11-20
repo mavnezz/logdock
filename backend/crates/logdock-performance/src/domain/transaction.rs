@@ -27,10 +27,12 @@ pub enum Kind {
     QueueProcess,
     /// Jobs put into a queue (`queue.publish` spans), by queue.
     QueuePublish,
+    /// Requests by the release that answered them; flagged when they failed.
+    Release,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 10] = [
+    pub const ALL: [Kind; 11] = [
         Kind::Request,
         Kind::Job,
         Kind::Command,
@@ -41,6 +43,7 @@ impl Kind {
         Kind::QueueWait,
         Kind::QueueProcess,
         Kind::QueuePublish,
+        Kind::Release,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -55,6 +58,7 @@ impl Kind {
             Kind::QueueWait => "queue_wait",
             Kind::QueueProcess => "queue_process",
             Kind::QueuePublish => "queue_publish",
+            Kind::Release => "release",
         }
     }
 
@@ -282,6 +286,14 @@ impl Transaction {
             duration_us: self.duration_us,
             flagged: self.failed(),
         }];
+        if let Some(release) = self.release.as_ref().filter(|_| self.kind == Kind::Request) {
+            all.push(Measurement {
+                kind: Kind::Release,
+                name: cut(release.clone()),
+                duration_us: self.duration_us,
+                flagged: self.failed(),
+            });
+        }
         if let Some(queue) = self.queue.as_ref().filter(|_| self.kind == Kind::Job) {
             all.push(Measurement {
                 kind: Kind::QueueProcess,
@@ -613,12 +625,15 @@ pub(crate) mod tests {
             names,
             [
                 (Kind::Request, "GET /orders/{order}", false),
+                // The request again, by the release that answered it.
+                (Kind::Release, "dev-1", false),
                 (Kind::Query, "select * from orders where id = ? and status in (...)", false),
                 (Kind::Cache, "get user:<n>:cart", true),
                 (Kind::Outgoing, "POST api.stripe.com", true),
             ]
         );
-        assert_eq!(measured[1].duration_us, 2_000);
+        assert_eq!(measured[1].duration_us, 500_000, "the release counts the whole request");
+        assert_eq!(measured[2].duration_us, 2_000);
         assert!(Transaction::from_payload(&request("/x", 503, 0.1)).unwrap().failed());
         assert!(Transaction::from_payload(&object(vec![("transaction", s("x"))])).is_none(), "no times");
     }

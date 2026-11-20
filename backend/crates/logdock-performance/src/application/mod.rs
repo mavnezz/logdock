@@ -36,6 +36,7 @@ pub struct PerformancePorts {
 pub struct PerformanceUseCases {
     pub ingest: IngestTransaction,
     pub overview: Overview,
+    pub extents: Extents,
     pub series: Series,
     pub samples: Samples,
     pub trace: TransactionsOfTrace,
@@ -47,6 +48,7 @@ impl PerformanceUseCases {
         Self {
             ingest: IngestTransaction { ports: Arc::clone(&ports) },
             overview: Overview { ports: Arc::clone(&ports) },
+            extents: Extents { ports: Arc::clone(&ports) },
             series: Series { ports: Arc::clone(&ports) },
             samples: Samples { ports: Arc::clone(&ports) },
             trace: TransactionsOfTrace { ports },
@@ -113,6 +115,29 @@ pub enum Order {
     Count,
     Slowest,
     Failures,
+}
+
+/// Query: each name of one kind with the first and last minute it was
+/// measured in the range.
+#[derive(Clone)]
+pub struct Extents {
+    ports: Arc<PerformancePorts>,
+}
+
+impl Extents {
+    pub async fn execute(
+        &self,
+        query: RollupQuery,
+    ) -> Result<Vec<(String, Timestamp, Timestamp)>, PerformanceError> {
+        check(&query)?;
+        let rows = self.ports.rollups.extents(&query).await?;
+        Ok(rows
+            .into_iter()
+            .map(|(name, first, last)| {
+                (name, Timestamp::from_unix_seconds(first), Timestamp::from_unix_seconds(last + 59))
+            })
+            .collect())
+    }
 }
 
 /// Query: the names of one kind, added up over a range.

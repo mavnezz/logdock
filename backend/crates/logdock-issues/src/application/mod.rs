@@ -21,8 +21,8 @@ pub use alerts::{NotifyPolicy, alert_mail};
 pub use ingest::{IngestEvent, IngestedEvent};
 use ports::{EventStore, IssueRepository};
 pub use queries::{
-    EventsOfTrace, GetEvent, GetIssue, IssueDetail, ListEvents, ListIssues, SummarizeTags, TAG_SAMPLE,
-    TagSummary, TagValue,
+    EventsOfTrace, GetEvent, GetIssue, IssueDetail, ListEvents, ListIssues, ReleasesErrors, SummarizeTags,
+    TAG_SAMPLE, TagSummary, TagValue,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +62,7 @@ pub struct IssueUseCases {
     pub get: GetIssue,
     pub events: ListEvents,
     pub tags: SummarizeTags,
+    pub releases: ReleasesErrors,
     pub event: GetEvent,
     pub trace: EventsOfTrace,
     pub change: ChangeStatus,
@@ -77,6 +78,7 @@ impl IssueUseCases {
             get: GetIssue { context: Arc::clone(&context) },
             events: ListEvents { context: Arc::clone(&context) },
             tags: SummarizeTags { context: Arc::clone(&context) },
+            releases: ReleasesErrors { context: Arc::clone(&context) },
             event: GetEvent { context: Arc::clone(&context) },
             trace: EventsOfTrace { context: Arc::clone(&context) },
             change: ChangeStatus { context: Arc::clone(&context) },

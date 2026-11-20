@@ -286,6 +286,19 @@ async function main() {
     expect(queue.wait && queue.wait.max_ms > 0, `waited ${JSON.stringify(queue.wait)}`)
     return `default: ${queue.published} put in, ${queue.processed} ran, waited p95 ${queue.wait.p95_ms} ms`
   })
+  await check('the release shows its requests and new issues', async () => {
+    const release = await eventually('release dev-1', async () =>
+      (await logdock.get(`/api/v1/releases?project=${project.id}`)).find(
+        (r) => r.release === 'dev-1' && r.requests && r.new_issues > 0,
+      ),
+    )
+    const issues = await logdock.get(`/api/v1/issues?project=${project.id}&status=all&release=dev-1`)
+    expect(
+      issues.length === release.new_issues,
+      `${issues.length} new issues listed, ${release.new_issues} counted`,
+    )
+    return `dev-1: ${release.requests.count} requests, ${release.events} errors, ${release.new_issues} new issues`
+  })
   await check('a request’s trace holds the job it queued', async () => {
     const samples = await logdock.get(
       `/api/v1/performance/samples?kind=request&name=${encodeURIComponent('GET /scenario/job')}&${lastHour()}`,

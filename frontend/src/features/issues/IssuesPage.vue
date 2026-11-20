@@ -39,6 +39,7 @@ const status = computed(() =>
 )
 const sort = computed(() => pick<Sort>(one(route.query, 'sort'), SORTS, 'last_seen'))
 const q = computed(() => one(route.query, 'q'))
+const release = computed(() => one(route.query, 'release'))
 const page = computed(() => Math.max(1, Number.parseInt(one(route.query, 'page'), 10) || 1))
 const typed = ref(q.value)
 watch(q, (value) => (typed.value = value))
@@ -48,6 +49,7 @@ function update(changes: Record<string, string>): void {
     status: status.value,
     sort: sort.value,
     q: q.value,
+    release: release.value,
     // Another filter starts from the first page.
     page: 'page' in changes ? (changes.page ?? '1') : '1',
     ...changes,
@@ -56,6 +58,7 @@ function update(changes: Record<string, string>): void {
   if (query.status === 'unresolved') delete query.status
   if (query.sort === 'last_seen') delete query.sort
   if (!query.q) delete query.q
+  if (!query.release) delete query.release
   void router.replace({ query })
 }
 
@@ -65,6 +68,7 @@ const filters = computed<IssueFilters>(() => ({
   status: status.value,
   sort: sort.value,
   q: q.value,
+  release: release.value,
   page: page.value,
 }))
 const issues = useIssues(filters)
@@ -113,6 +117,12 @@ const several = computed(() => scope.project === null)
       </NativeSelect>
       <Button type="submit" variant="outline">{{ t('logs.searchButton') }}</Button>
     </form>
+    <p v-if="release" class="flex items-center gap-2 text-sm">
+      <Badge variant="secondary" class="font-mono">{{ t('issues.newIn', { release }) }}</Badge>
+      <Button size="sm" variant="ghost" @click="update({ release: '' })">{{
+        t('issues.clearRelease')
+      }}</Button>
+    </p>
 
     <Alert v-if="issues.error.value" variant="destructive">{{
       problemMessage(issues.error.value)

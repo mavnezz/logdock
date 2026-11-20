@@ -525,6 +525,15 @@
             }
           },
           {
+            "name": "release",
+            "in": "query",
+            "description": "Only issues that first appeared in this release.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "description": "`last_seen` (the default), `first_seen` or `count`.",
@@ -2482,6 +2491,54 @@
         ]
       }
     },
+    "/api/v1/releases": {
+      "get": {
+        "tags": [
+          "releases"
+        ],
+        "summary": "Releases, newest first: errors, new issues and requests of each.",
+        "operationId": "releases",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Release"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/setup": {
       "get": {
         "tags": [
@@ -4323,6 +4380,57 @@
           }
         }
       },
+      "Release": {
+        "type": "object",
+        "required": [
+          "release",
+          "first_seen",
+          "last_seen",
+          "events",
+          "issues",
+          "new_issues"
+        ],
+        "properties": {
+          "events": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Error events in it, the issues they belong to, and the issues that\nfirst appeared in it.",
+            "minimum": 0
+          },
+          "first_seen": {
+            "type": "string",
+            "description": "When its first and last error or request was seen."
+          },
+          "issues": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "last_seen": {
+            "type": "string"
+          },
+          "new_issues": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "release": {
+            "type": "string",
+            "description": "As the SDK sends it (`SENTRY_RELEASE`)."
+          },
+          "requests": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Stats",
+                "description": "Its requests (measured with tracing): count, failures, durations."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ReleaseCount": {
         "type": "object",
         "required": [
@@ -5281,6 +5389,10 @@
     {
       "name": "monitors",
       "description": "Scheduled tasks by their check-ins"
+    },
+    {
+      "name": "releases",
+      "description": "What each release brought in errors and how its requests did"
     }
   ]
 }

@@ -44,6 +44,7 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/features/performance/PerformancePage.vue'),
       },
       { path: 'queues', component: () => import('@/features/performance/QueuesPage.vue') },
+      { path: 'releases', component: () => import('@/features/releases/ReleasesPage.vue') },
       {
         path: 'traces/:id',
         component: () => import('@/features/traces/TracePage.vue'),

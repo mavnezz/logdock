@@ -4,10 +4,13 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use logdock_kernel::{AuditEntry, AuditLog, Clock, Mail, Mailer, PortError, Scope, Timestamp, Value};
+use logdock_kernel::{
+    AuditEntry, AuditLog, Clock, EnvironmentId, Mail, Mailer, PortError, ProjectId, Scope, Timestamp, Value,
+};
 
 use crate::application::ports::{
-    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSummary, ReleaseCount, StoredEvent,
+    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSummary, ReleaseCount, ReleaseErrors,
+    StoredEvent,
 };
 use crate::application::{IssuePorts, IssueUseCases};
 use crate::domain::{ErrorEvent, Issue, IssueId, IssueStatus, NewIssue};
@@ -110,6 +113,61 @@ impl IssueRepository for MemoryIssues {
             }
         }
         Ok(hours)
+    }
+
+    async fn errors_by_release(
+        &self,
+        projects: &[ProjectId],
+        environments: &[EnvironmentId],
+        limit: u32,
+    ) -> Result<Vec<ReleaseErrors>, PortError> {
+        let issues = self.issues.lock().unwrap().clone();
+        let within = |issue: &Issue| {
+            (projects.is_empty() || projects.contains(&issue.scope.project))
+                && (environments.is_empty() || environments.contains(&issue.scope.environment))
+        };
+        let mut out: Vec<ReleaseErrors> = Vec::new();
+        for (id, at, release) in self.hits.lock().unwrap().iter() {
+            let Some(release) = release else { continue };
+            if !issues.iter().any(|(i, _)| i.id == *id && within(i)) {
+                continue;
+            }
+            let new = |r: &str| {
+                issues.iter().filter(|(i, _)| within(i) && i.first_release.as_deref() == Some(r)).count()
+                    as u64
+            };
+            match out.iter_mut().find(|r| &r.release == release) {
+                Some(known) => {
+                    known.events += 1;
+                    known.first_seen = known.first_seen.min(*at);
+                    known.last_seen = known.last_seen.max(*at);
+                }
+                None => out.push(ReleaseErrors {
+                    release: release.clone(),
+                    events: 1,
+                    issues: 0,
+                    new_issues: new(release),
+                    first_seen: *at,
+                    last_seen: *at,
+                }),
+            }
+        }
+        for summary in &mut out {
+            let mut ids: Vec<IssueId> = self
+                .hits
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, _, r)| r.as_deref() == Some(summary.release.as_str()))
+                .map(|(id, _, _)| *id)
+                .collect();
+            ids.sort_by_key(|id| id.get());
+            ids.dedup();
+            summary.issues = ids.len() as u64;
+        }
+        out.sort_by_key(|r| std::cmp::Reverse(r.last_seen));
+        out.truncate(limit as usize);
+        Ok(out)
     }
 
     async fn releases(&self, id: IssueId) -> Result<Vec<ReleaseCount>, PortError> {

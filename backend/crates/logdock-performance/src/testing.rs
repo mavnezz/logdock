@@ -59,6 +59,17 @@ impl RollupStore for MemoryRollups {
         Ok(names.into_iter().collect())
     }
 
+    async fn extents(&self, query: &RollupQuery) -> Result<Vec<(String, i64, i64)>, PortError> {
+        let mut names: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+        for (project, environment, minute, kind, name) in self.0.lock().unwrap().keys() {
+            if wanted(query, scope_of(*project, *environment), *minute, *kind) {
+                let range = names.entry(name.clone()).or_insert((*minute, *minute));
+                *range = (range.0.min(*minute), range.1.max(*minute));
+            }
+        }
+        Ok(names.into_iter().map(|(name, (first, last))| (name, first, last)).collect())
+    }
+
     async fn series(
         &self,
         query: &RollupQuery,

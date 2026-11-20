@@ -23,6 +23,7 @@ const de: Messages = {
     older: 'Ältere',
   },
   nav: {
+    releases: 'Releases',
     queues: 'Queues',
     menu: 'Menü',
     logs: 'Logs',
@@ -105,6 +106,21 @@ const de: Messages = {
       groups: { debug: 'Debug', info: 'Info', warn: 'Warnung', error: 'Fehler' },
     },
   },
+  releases: {
+    title: 'Releases',
+    description:
+      'Was jedes Release gebracht hat: seine Requests, wie viele fehlschlugen und wie schnell sie waren, seine Fehler und die Issues, die darin zuerst auftraten, verglichen mit dem Release davor.',
+    empty: 'Noch kein Release',
+    emptyHint:
+      'Releases erscheinen mit den Fehlern und gemessenen Requests, die sie tragen (SENTRY_RELEASE).',
+    release: 'Release',
+    firstSeen: 'Zuerst gesehen',
+    requests: 'Requests',
+    failed: 'Fehlgeschlagen',
+    errors: 'Fehler',
+    newIssues: 'Neue Issues',
+    againstBefore: 'Verglichen mit dem Release davor',
+  },
   queues: {
     title: 'Queues',
     description:
@@ -155,6 +171,8 @@ const de: Messages = {
     },
   },
   issues: {
+    newIn: 'Neu in {release}',
+    clearRelease: 'Alle Releases zeigen',
     flow: 'Was der Request gemacht hat',
     flowMissing:
       'Kein Ablauf: Dieser Request wurde nicht gemessen. Tracing (SENTRY_TRACES_SAMPLE_RATE) ist aus oder hat ihn nicht erfasst.',
