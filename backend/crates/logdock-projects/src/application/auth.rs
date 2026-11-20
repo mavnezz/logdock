@@ -262,7 +262,6 @@ mod tests {
 
     use logdock_kernel::RequestContext;
 
-    use super::*;
     use crate::testing::TestProjects;
 
     /// A key found in the cache before its first use was written: checking it
