@@ -100,7 +100,10 @@ impl AuthenticateKey {
         }
         let now = p.clock.now();
         let hash = p.tokens.hash(key);
-        if let Some(cached) = self.cache.0.read().await.get(hash.as_str())
+        // Copied out, so the read lock is gone before `touch` takes the
+        // write lock: held across it, the two would wait for each other.
+        let cached = self.cache.0.read().await.get(hash.as_str()).cloned();
+        if let Some(cached) = cached
             && now.duration_since(cached.checked_at) < CACHE_FOR
         {
             let scope = cached.scope.clone();
@@ -209,7 +212,10 @@ impl ResolveStage {
             )));
         }
         let added = match p.projects.add_environment(project.id, &name, p.clock.now()).await? {
-            Some(environment) => environment,
+            Some(environment) => {
+                tracing::info!(project = %project.name, stage = %name, "a new stage appeared in the data");
+                environment
+            }
             // Another request added it meanwhile.
             None => {
                 match p.projects.find(project.id).await?.and_then(|p| p.environment_named(&name).cloned()) {
@@ -219,7 +225,6 @@ impl ResolveStage {
             }
         };
         self.cache.clear().await;
-        tracing::info!(project = %project.name, stage = %name, "a new stage appeared in the data");
         Ok(StageFor::Stage(Stage::of(&project, &added)))
     }
 }
@@ -248,5 +253,40 @@ impl RecordIngest {
     /// A refusal before any key was checked.
     pub async fn refused(&self, project: ProjectId, reason: Rejection, detail: &str) {
         self.execute(project, None, &Tally::rejected(reason, 1, detail)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use logdock_kernel::RequestContext;
+
+    use super::*;
+    use crate::testing::TestProjects;
+
+    /// A key found in the cache before its first use was written: checking it
+    /// writes the use while nothing else holds the cache. It once waited for
+    /// its own read lock, and every ingest request behind it stopped.
+    #[tokio::test]
+    async fn a_cached_key_whose_use_is_not_written_yet_does_not_lock_up() {
+        let t = TestProjects::new();
+        let actor = logdock_kernel::Actor { account_id: 1, name: "ada".into() };
+        let project =
+            t.use_cases.create.execute(&actor, "orders", &[], &RequestContext::default()).await.unwrap();
+        let created = t
+            .use_cases
+            .create_key
+            .execute(&actor, project.id, None, "", &RequestContext::default())
+            .await
+            .unwrap();
+        let auth = &t.use_cases.authenticate_key;
+        auth.execute(None, created.secret.expose()).await.unwrap().unwrap();
+        for cached in auth.cache.0.write().await.values_mut() {
+            cached.touched_at = None;
+        }
+        let checked =
+            tokio::time::timeout(Duration::from_secs(5), auth.execute(None, created.secret.expose()));
+        assert!(checked.await.expect("no deadlock").unwrap().is_some());
     }
 }
