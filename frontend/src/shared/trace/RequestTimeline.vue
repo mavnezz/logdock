@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronRight, ZoomIn, ZoomOut } from 'lucide-vue-next'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { formatDuration } from '@/shared/lib/format'
@@ -40,7 +40,8 @@ const COLORS: Record<Category, string> = {
 }
 
 const collapsed = ref(new Set<string>())
-const selected = ref<Node | null>(null)
+// Shallow: compared by identity with the rows' nodes, not wrapped.
+const selected = shallowRef<Node | null>(null)
 /** The part shown, in microseconds of the timeline; `null`: all of it. */
 const zoom = ref<{ from: number; to: number } | null>(null)
 
@@ -50,9 +51,13 @@ watch(
   timeline,
   (value) => {
     const folded = new Set<string>()
-    const several =
-      value.roots.length > 1 ||
-      value.roots.some((r) => r.children.some((c) => c.kind === 'transaction'))
+    let transactions = 0
+    const count = (n: Node) => {
+      if (n.kind === 'transaction') transactions++
+      n.children.forEach(count)
+    }
+    value.roots.forEach(count)
+    const several = transactions > 1
     const visit = (n: Node) => {
       if (n.kind === 'group') folded.add(n.key)
       if (several && n.kind === 'transaction' && n !== focus.value && !contains(n, focus.value)) {
