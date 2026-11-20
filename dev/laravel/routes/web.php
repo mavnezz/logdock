@@ -54,10 +54,12 @@ Route::get('/scenario/work', function () {
 // in SQLite) that together they cost more than 50 ms.
 Route::get('/scenario/n-plus-one', function () {
     $items = [];
+    // Each query takes long enough that the eight add up to more than the
+    // 50 ms an N+1 takes, also on a fast machine.
     foreach (range(1, 8) as $item) {
         $items[] = DB::selectOne(
             'with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select count(*) as n, ? as item from c',
-            [60_000, $item],
+            [200_000, $item],
         )->n;
     }
 
