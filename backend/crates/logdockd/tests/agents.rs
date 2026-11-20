@@ -81,6 +81,11 @@ async fn api_tokens_read_for_their_account_and_change_issues_at_most() {
     send_request_data(&app, project, &key).await;
     let issues = eventually(&admin, "/api/v1/issues", |i| i.as_array().is_some_and(|i| !i.is_empty())).await;
     let issue = issues[0]["id"].as_i64().unwrap();
+    // Log entries are written in the background.
+    eventually(&admin, "/api/v1/logs?q=order_id:42", |l| {
+        l["entries"].as_array().is_some_and(|e| !e.is_empty())
+    })
+    .await;
 
     let read = new_token(&admin, "script", "read").await;
     assert!(read.starts_with("ldt_"));
@@ -162,6 +167,11 @@ async fn claude_reads_logs_issues_and_traces_through_mcp() {
     let (project, _, key) = project_with_key(&admin, "orders").await;
     send_request_data(&app, project, &key).await;
     eventually(&admin, "/api/v1/issues", |i| i.as_array().is_some_and(|i| !i.is_empty())).await;
+    // Log entries are written in the background.
+    eventually(&admin, "/api/v1/logs?q=order_id:42", |l| {
+        l["entries"].as_array().is_some_and(|e| !e.is_empty())
+    })
+    .await;
     let read = new_token(&admin, "claude", "read").await;
 
     // Only with a token.
