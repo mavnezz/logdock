@@ -311,6 +311,18 @@ async function main() {
     )
     return `dev-1: ${release.requests.count} requests, ${release.events} errors, ${release.new_issues} new issues`
   })
+  await check('the overview sums up the stage', async () => {
+    const overview = await eventually('an overview with requests and errors', async () => {
+      const o = await logdock.get(`/api/v1/overview?project=${project.id}`)
+      return o.requests.total.count > 0 && o.errors.events > 0 ? o : null
+    })
+    expect(overview.jobs.total.count > 0, 'no jobs')
+    expect(overview.errors.top.length > 0, 'no busiest issue')
+    expect(overview.slowest_routes.length > 0, 'no slowest route')
+    const logged = Object.values(overview.logs.total).reduce((a, b) => a + b, 0)
+    expect(logged > 0, 'no log entries')
+    return `${overview.requests.total.count} requests, ${overview.errors.events} errors, ${logged} log entries`
+  })
   await check('a request’s trace holds the job it queued', async () => {
     const samples = await logdock.get(
       `/api/v1/performance/samples?kind=request&name=${encodeURIComponent('GET /scenario/job')}&${lastHour()}`,

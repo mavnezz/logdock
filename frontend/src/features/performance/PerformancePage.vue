@@ -14,6 +14,7 @@ import { Badge } from '@/shared/ui/badge'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { Pager } from '@/shared/ui/pager'
+import { SeriesChart } from '@/shared/ui/series-chart'
 
 import {
   KINDS,
@@ -27,7 +28,6 @@ import {
   useSamples,
   useSeries,
 } from './api'
-import SeriesChart from './SeriesChart.vue'
 
 const { t } = useI18n()
 const route = useRoute()

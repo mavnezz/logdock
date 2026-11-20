@@ -397,6 +397,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Requests, jobs, errors, logs and scheduled tasks of a range at a glance. */
+        get: operations["at_a_glance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/performance": {
         parameters: {
             query?: never;
@@ -753,6 +770,38 @@ export interface components {
         };
         /** @enum {string} */
         AccountRole: "admin" | "member";
+        ActiveIssueDto: components["schemas"]["Issue"] & {
+            /**
+             * Format: int64
+             * @description Events in the range.
+             */
+            events: number;
+            /**
+             * Format: int64
+             * @description Users affected, over all its events.
+             */
+            users: number;
+        };
+        /** @description Requests or jobs over the range. */
+        Activity: {
+            /** Format: int64 */
+            bucket_seconds: number;
+            buckets: components["schemas"]["ActivityBucket"][];
+            /** @description `flagged` counts the failed ones. */
+            total: components["schemas"]["Stats"];
+        };
+        ActivityBucket: {
+            /** Format: int64 */
+            count: number;
+            /**
+             * Format: int64
+             * @description Failed requests or jobs.
+             */
+            failed: number;
+            /** Format: double */
+            p95_ms: number;
+            start: string;
+        };
         AddEnvironmentRequest: {
             name: string;
         };
@@ -849,6 +898,34 @@ export interface components {
             /** Format: int64 */
             id: number;
             name: string;
+        };
+        ErrorBucket: {
+            /** Format: int64 */
+            count: number;
+            start: string;
+        };
+        /** @description Error events over the range, and their issues. */
+        Errors: {
+            /**
+             * Format: int64
+             * @description Whole hours: events are counted per hour.
+             */
+            bucket_seconds: number;
+            buckets: components["schemas"]["ErrorBucket"][];
+            /** Format: int64 */
+            events: number;
+            /**
+             * Format: int64
+             * @description First seen in the range.
+             */
+            new_issues: number;
+            /**
+             * Format: int64
+             * @description Came back in the range after they were resolved.
+             */
+            regressed: number;
+            /** @description The issues with the most events in the range; muted ones left out. */
+            top: components["schemas"]["ActiveIssueDto"][];
         };
         Event: {
             breadcrumbs: components["schemas"]["Breadcrumb"][];
@@ -1059,6 +1136,12 @@ export interface components {
             detail: string;
             reason: string;
         };
+        LogActivity: {
+            /** Format: int64 */
+            bucket_seconds: number;
+            buckets: components["schemas"]["HistogramBucket"][];
+            total: components["schemas"]["LogLevels"];
+        };
         LogEntry: {
             /** @description The attributes, flattened (`user.id`), in the order they were sent. */
             attributes: {
@@ -1090,6 +1173,20 @@ export interface components {
             /** @description Whether limits cut something short. */
             truncated: boolean;
             user_id?: string | null;
+        };
+        LogLevels: {
+            /** Format: int64 */
+            debug: number;
+            /** Format: int64 */
+            error: number;
+            /** Format: int64 */
+            fatal: number;
+            /** Format: int64 */
+            info: number;
+            /** Format: int64 */
+            trace: number;
+            /** Format: int64 */
+            warn: number;
         };
         LogPage: {
             entries: components["schemas"]["LogEntry"][];
@@ -1141,12 +1238,35 @@ export interface components {
             check_ins: components["schemas"]["CheckInDto"][];
             monitor: components["schemas"]["Monitor"];
         };
+        MonitorHealth: {
+            /** @description Failing or missed, as they are now. */
+            failing: components["schemas"]["Monitor"][];
+            /** Format: int32 */
+            ok: number;
+            /** Format: int32 */
+            total: number;
+        };
         NamedStats: components["schemas"]["Stats"] & {
             /**
              * @description `GET /orders/{order}`, `App\Jobs\SendInvoice`, a normalized statement,
              *     `POST api.stripe.com`, `get user:<n>:cart`.
              */
             name: string;
+        };
+        Overview: {
+            errors: components["schemas"]["Errors"];
+            failing_routes: components["schemas"]["NamedStats"][];
+            from: string;
+            jobs: components["schemas"]["Activity"];
+            logs: components["schemas"]["LogActivity"];
+            monitors: components["schemas"]["MonitorHealth"];
+            requests: components["schemas"]["Activity"];
+            /**
+             * @description The routes with the slowest p95, and those with the most failed
+             *     requests.
+             */
+            slowest_routes: components["schemas"]["NamedStats"][];
+            to: string;
         };
         PasswordRequest: {
             current: string;
@@ -2447,6 +2567,41 @@ export interface operations {
                 content?: never;
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    at_a_glance: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description RFC 3339; the last 24 hours by default. */
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

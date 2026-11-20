@@ -599,8 +599,9 @@ It uses plain routes; there is no desktop with windows.
 
 | Page | Content |
 |---|---|
+| Overview | the start page: a project or stage over a range (1 hour to 30 days), as Nightwatch's dashboard shows it: requests with their failures and p95, jobs, error events per hour with new and returning issues, log entries with their errors, scheduled tasks in trouble; the issues with the most events, the slowest and the most failing routes (`GET /api/v1/overview`) |
 | Logs | newest first, live view, full-text search, filters (project, stage, service, host, level, time range), detail with all attributes, "same trace" |
-| Issues | list by state, last seen and count; detail with stack trace, events, tags, releases and the trace's logs |
+| Issues | list by state, last seen, count and users affected, search by tag; detail with stack trace, events, the tags' values, releases and the trace's logs |
 | Projects | stages, keys, DSNs, ingest counts and rejections |
 | Settings | accounts, retention and storage use, notifications, backups |
 | Monitoring (R2) | requests, jobs, queries, outgoing requests, cache, scheduled tasks |

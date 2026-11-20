@@ -58,9 +58,9 @@ describe('the navigation guard', () => {
     stubApi({ 'GET /api/v1/auth/session': () => session('member') })
     const r = router()
     await r.push('/accounts')
-    expect(r.currentRoute.value.fullPath).toBe('/logs')
+    expect(r.currentRoute.value.fullPath).toBe('/overview')
     await r.push('/login')
-    expect(r.currentRoute.value.fullPath).toBe('/logs')
+    expect(r.currentRoute.value.fullPath).toBe('/overview')
   })
 
   it('brings a list back with the filters it was left with', async () => {

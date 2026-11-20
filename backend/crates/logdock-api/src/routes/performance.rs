@@ -270,7 +270,7 @@ async fn series(
     ApiQuery(n): ApiQuery<NameQuery>,
 ) -> Result<Json<SeriesPage>, ApiError> {
     auth.require(Permission::ReadData)?;
-    let page = state.performance.series.execute(range(&q)?, &n.name).await?;
+    let page = state.performance.series.execute(range(&q)?, Some(&n.name)).await?;
     Ok(Json(SeriesPage {
         bucket_seconds: page.bucket_seconds,
         buckets: page

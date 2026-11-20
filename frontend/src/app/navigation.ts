@@ -10,7 +10,8 @@ export interface NavItem {
 }
 
 export const navigation: NavItem[] = [
-  { name: 'logs', path: '/logs', icon: 'logs', section: 'observe' },
+  { name: 'overview', path: '/overview', icon: 'overview', section: 'observe' },
+  { name: 'logs', path: '/logs', icon: 'logs' },
   { name: 'issues', path: '/issues', icon: 'issues' },
   { name: 'performance', path: '/performance', icon: 'performance' },
   { name: 'queues', path: '/queues', icon: 'queues' },

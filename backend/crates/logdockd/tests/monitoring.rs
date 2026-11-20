@@ -8,7 +8,7 @@ use std::io::Write;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use common::{Browser, TestApp, project_with_key};
+use common::{Browser, TestApp, eventually, project_with_key};
 use serde_json::Value;
 
 const FIXTURES: &str =
@@ -140,5 +140,62 @@ async fn a_failing_scheduled_task_becomes_a_failing_monitor() {
     let counts = admin.get(&format!("/api/v1/projects/{project}/ingest")).await.json();
     assert_eq!(counts[0]["accepted"], 2);
     assert_eq!(counts[0]["skipped"], 0);
+    app.stop().await;
+}
+
+#[tokio::test]
+async fn the_overview_sums_up_a_stage_at_a_glance() {
+    let app = TestApp::start().await;
+    let admin = Browser::setup(&app, "ada@example.com").await;
+    let (project, production, key) = project_with_key(&admin, "orders").await;
+    send(
+        &app,
+        project,
+        &key,
+        &[
+            "transaction-request.envelope",
+            "transaction-job.envelope",
+            "event-request.envelope",
+            "event-job.envelope",
+            "logs.envelope",
+            "check-in-started.envelope",
+            "check-in-failed.envelope",
+        ],
+    )
+    .await;
+
+    let path = format!("/api/v1/overview?project={project}&environment={production}&{DAY}");
+    // Log entries are written in the background.
+    let overview = eventually(&admin, &path, |o| o["logs"]["total"]["info"].as_u64() > Some(0)).await;
+    assert_eq!(overview["from"], "2026-11-19T00:00:00.000000Z");
+    let requests = &overview["requests"];
+    assert!(requests["total"]["count"].as_u64().unwrap() >= 1, "{requests}");
+    assert_eq!(requests["bucket_seconds"], 1800);
+    assert_eq!(requests["buckets"].as_array().unwrap().len(), 48);
+    assert!(overview["jobs"]["total"]["count"].as_u64().unwrap() >= 1);
+    assert!(overview["slowest_routes"][0]["p95_ms"].as_f64().unwrap() > 0.0, "{overview}");
+
+    let errors = &overview["errors"];
+    assert_eq!((errors["events"].as_u64(), errors["new_issues"].as_u64()), (Some(2), Some(2)), "{errors}");
+    assert_eq!(errors["bucket_seconds"], 3600);
+    assert_eq!(errors["top"].as_array().unwrap().len(), 2);
+    assert_eq!(errors["top"][0]["events"], 1);
+
+    let logs = &overview["logs"]["total"];
+    let entries: u64 =
+        ["trace", "debug", "info", "warn", "error", "fatal"].iter().map(|l| logs[l].as_u64().unwrap()).sum();
+    assert!(entries > 0, "{logs}");
+
+    let monitors = &overview["monitors"];
+    assert_eq!((monitors["total"].as_u64(), monitors["ok"].as_u64()), (Some(1), Some(0)));
+    assert_eq!(monitors["failing"][0]["name"], "nightly-report");
+
+    // Another project's overview is empty; a range must end after it starts.
+    let other = admin.get(&format!("/api/v1/overview?project={}&{DAY}", project + 1)).await.json();
+    assert_eq!(other["errors"]["events"], 0);
+    assert_eq!(other["requests"]["total"]["count"], 0);
+    assert_eq!(other["monitors"]["total"], 0);
+    let backwards = admin.get("/api/v1/overview?from=2026-11-20T00:00:00Z&to=2026-11-19T00:00:00Z").await;
+    assert_eq!(backwards.status, StatusCode::BAD_REQUEST);
     app.stop().await;
 }

@@ -73,12 +73,14 @@ impl RollupStore for MemoryRollups {
     async fn series(
         &self,
         query: &RollupQuery,
-        name: &str,
+        name: Option<&str>,
         bucket_seconds: i64,
     ) -> Result<Vec<(i64, Rollup)>, PortError> {
         let mut buckets: BTreeMap<i64, Rollup> = BTreeMap::new();
         for ((project, environment, minute, kind, n), rollup) in self.0.lock().unwrap().iter() {
-            if n == name && wanted(query, scope_of(*project, *environment), *minute, *kind) {
+            if name.is_none_or(|name| n == name)
+                && wanted(query, scope_of(*project, *environment), *minute, *kind)
+            {
                 buckets.entry(minute.div_euclid(bucket_seconds) * bucket_seconds).or_default().merge(rollup);
             }
         }

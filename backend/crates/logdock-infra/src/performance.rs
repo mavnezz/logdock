@@ -177,7 +177,7 @@ impl RollupStore for SqliteRollups {
     async fn series(
         &self,
         query: &RollupQuery,
-        name: &str,
+        name: Option<&str>,
         bucket_seconds: i64,
     ) -> Result<Vec<(i64, Rollup)>, PortError> {
         self.flush().await?;
@@ -186,7 +186,9 @@ impl RollupStore for SqliteRollups {
         sql.push_bind(bucket_seconds).push(") * ").push_bind(bucket_seconds).push(" AS bucket, ");
         sql.push(sums()).push(" FROM perf_rollups");
         Self::filtered(&mut sql, query);
-        sql.push(" AND name = ").push_bind(name.to_owned());
+        if let Some(name) = name {
+            sql.push(" AND name = ").push_bind(name.to_owned());
+        }
         sql.push(" GROUP BY bucket ORDER BY bucket");
         let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
         Ok(rows.iter().map(|row| (row.get("bucket"), rollup(row))).collect())
@@ -494,11 +496,12 @@ mod tests {
         assert_eq!(name, "GET /");
         assert_eq!((total.count, total.flagged, total.max_us), (5, 1, 30_000));
         assert_eq!(total.total_us, 10_000 + 20_000 + 60_000 + 5_000);
-        let series = rollups.series(&query, "GET /", 300).await.unwrap();
+        let series = rollups.series(&query, Some("GET /"), 300).await.unwrap();
         assert_eq!(
             series.iter().map(|(b, r)| (*b, r.count)).collect::<Vec<_>>(),
             [(1_800_000_000, 4), (1_800_000_600, 1)]
         );
+        assert_eq!(rollups.series(&query, None, 3600).await.unwrap()[0].1.count, 5, "all names");
         let other = RollupQuery { kind: Kind::Query, ..query.clone() };
         assert!(rollups.names(&other).await.unwrap().is_empty());
         let elsewhere = RollupQuery { projects: vec![ProjectId::new(9)], ..query };

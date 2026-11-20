@@ -32,8 +32,8 @@ const PROTOCOL_VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const MAX_TEXT: usize = 200_000;
 
 const INSTRUCTIONS: &str = "Logdock holds the logs, errors and performance data of Laravel apps: \
-projects (one per app), each with stages (production, staging, …). Start with list_projects. \
-search_logs searches log entries (words, \"phrases\", key:value attributes, trace:<id>); \
+projects (one per app), each with stages (production, staging, …). Start with list_projects, \
+then overview for how a project or stage is doing. search_logs searches log entries (words, \"phrases\", key:value attributes, trace:<id>); \
 list_issues and get_issue show errors grouped into issues, with stack traces and the request; \
 get_trace shows everything that carries one trace ID, across containers (the request, the jobs it \
 queued, their logs and errors); performance shows where requests, jobs, queries and outgoing \
@@ -275,6 +275,21 @@ impl Server {
                 let projects = self.projects().await?;
                 let query = scope(args, &projects)?;
                 Ok(compact(self.get("/releases", &query).await?))
+            }
+            "overview" => {
+                let projects = self.projects().await?;
+                let mut query = scope(args, &projects)?;
+                query.extend(range(args)?);
+                let mut overview = self.get("/overview", &query).await?;
+                // The charts' buckets: the totals and lists say it in fewer words.
+                for part in ["requests", "jobs", "errors", "logs"] {
+                    if let Some(part) = overview.get_mut(part).and_then(Value::as_object_mut) {
+                        part.remove("buckets");
+                        part.remove("bucket_seconds");
+                    }
+                }
+                name_scopes(&mut overview, &projects);
+                Ok(compact(overview))
             }
             "list_queues" => {
                 let projects = self.projects().await?;
@@ -722,6 +737,17 @@ fn read_tools() -> Vec<Value> {
             "Releases",
             "Releases, newest first: their requests (count, failures, p95), error events, and the issues that first appeared in each. list_issues takes no release; get_issue shows an issue's first and last release.",
             scope_properties(),
+            &[],
+        ),
+        tool(
+            "overview",
+            "How it is going",
+            "A project or stage at a glance over a range (24 hours by default): requests with their failures and p95, jobs, error events with new and returning issues and the busiest issues, the slowest and most failing routes, log entries per level, and failing scheduled tasks. Start here.",
+            {
+                let mut properties = scope_properties();
+                range_properties(&mut properties);
+                properties
+            },
             &[],
         ),
         tool(

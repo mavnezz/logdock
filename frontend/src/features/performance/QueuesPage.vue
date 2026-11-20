@@ -10,9 +10,9 @@ import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { SeriesChart } from '@/shared/ui/series-chart'
 
 import { type PerfRange, RANGES, rangeParams, useQueues, useSeries } from './api'
-import SeriesChart from './SeriesChart.vue'
 
 const { t } = useI18n()
 const route = useRoute()

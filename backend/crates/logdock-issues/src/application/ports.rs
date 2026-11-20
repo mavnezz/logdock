@@ -42,6 +42,38 @@ pub struct IssueSummary {
     pub users: u64,
 }
 
+/// The errors of some scopes over a range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActivityQuery {
+    pub projects: Vec<ProjectId>,
+    pub environments: Vec<EnvironmentId>,
+    pub from: Timestamp,
+    pub to: Timestamp,
+    /// Whole hours: events are counted per hour.
+    pub bucket_seconds: i64,
+    /// How many of the issues with the most events in the range.
+    pub top: u32,
+}
+
+/// An issue with its events in a range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActiveIssue {
+    pub issue: Issue,
+    pub events: u64,
+    pub users: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ErrorActivity {
+    /// (Unix seconds of the bucket's start, events) of the buckets with any.
+    pub buckets: Vec<(i64, u64)>,
+    /// Issues first seen in the range, and those that came back in it.
+    pub new_issues: u64,
+    pub regressed: u64,
+    /// Most events in the range first; muted issues are left out.
+    pub top: Vec<ActiveIssue>,
+}
+
 /// One tag of an issue's events.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TagKey {
@@ -128,6 +160,9 @@ pub trait IssueRepository: Send + Sync {
     ) -> Result<Vec<ReleaseErrors>, PortError>;
 
     async fn latest_event(&self, id: IssueId) -> Result<Option<Value>, PortError>;
+
+    /// What the issues of some scopes did in a range.
+    async fn activity(&self, query: &ActivityQuery) -> Result<ErrorActivity, PortError>;
 }
 
 /// An event as listed.

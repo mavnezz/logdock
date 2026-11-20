@@ -9,8 +9,8 @@ use logdock_kernel::{
 };
 
 use crate::application::ports::{
-    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount,
-    ReleaseErrors, StoredEvent, TagCount, TagKey,
+    ActiveIssue, ActivityQuery, ErrorActivity, EventStore, EventSummary, IssueQuery, IssueRepository,
+    IssueSort, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
 use crate::application::{IssuePorts, IssueUseCases};
 use crate::domain::{ErrorEvent, Issue, IssueId, IssueStatus, NewIssue};
@@ -266,6 +266,52 @@ impl IssueRepository for MemoryIssues {
 
     async fn latest_event(&self, id: IssueId) -> Result<Option<Value>, PortError> {
         Ok(self.issues.lock().unwrap().iter().find(|(i, _)| i.id == id).map(|(_, e)| e.clone()))
+    }
+
+    async fn activity(&self, query: &ActivityQuery) -> Result<ErrorActivity, PortError> {
+        let issues: Vec<Issue> = self
+            .issues
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(i, _)| i.clone())
+            .filter(|i| {
+                (query.projects.is_empty() || query.projects.contains(&i.scope.project))
+                    && (query.environments.is_empty() || query.environments.contains(&i.scope.environment))
+            })
+            .collect();
+        let within = |at: Timestamp| at.hour() >= query.from.hour() && at < query.to;
+        let mut out = ErrorActivity::default();
+        for (id, at, _) in self
+            .hits
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(id, at, _)| within(*at) && issues.iter().any(|i| i.id == *id))
+        {
+            let bucket = at.hour().div_euclid(query.bucket_seconds) * query.bucket_seconds;
+            match out.buckets.iter_mut().find(|(b, _)| *b == bucket) {
+                Some((_, n)) => *n += 1,
+                None => out.buckets.push((bucket, 1)),
+            }
+            match out.top.iter_mut().find(|a| a.issue.id == *id) {
+                Some(active) => active.events += 1,
+                None => {
+                    let issue = issues.iter().find(|i| i.id == *id).cloned().expect("filtered above");
+                    if !matches!(issue.status, IssueStatus::Muted { .. }) {
+                        let users = self.users(issue.id);
+                        out.top.push(ActiveIssue { issue, events: 1, users });
+                    }
+                }
+            }
+        }
+        out.buckets.sort();
+        out.top.sort_by_key(|a| std::cmp::Reverse(a.events));
+        out.top.truncate(query.top as usize);
+        let range = |at: Timestamp| at >= query.from && at < query.to;
+        out.new_issues = issues.iter().filter(|i| range(i.first_seen)).count() as u64;
+        out.regressed = issues.iter().filter(|i| i.regressed_at.is_some_and(range)).count() as u64;
+        Ok(out)
     }
 }
 

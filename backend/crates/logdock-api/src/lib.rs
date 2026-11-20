@@ -42,6 +42,7 @@ pub const API_V1: &str = "/api/v1";
 #[openapi(
     info(title = "Logdock API", description = "API of Logdock's web interface."),
     tags(
+        (name = "overview", description = "How a project or stage is doing over a range, at a glance"),
         (name = "system", description = "Health, version and storage"),
         (name = "auth", description = "The first setup, sign-in, the session and the caller's own account"),
         (name = "accounts", description = "Accounts and the audit log, for administrators"),

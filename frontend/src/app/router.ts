@@ -31,7 +31,8 @@ export const routes: RouteRecordRaw[] = [
     path: '/',
     component: () => import('./AppShell.vue'),
     children: [
-      { path: '', redirect: '/logs' },
+      { path: '', redirect: '/overview' },
+      { path: 'overview', component: () => import('@/features/overview/OverviewPage.vue') },
       { path: 'logs', component: () => import('@/features/logs/LogsPage.vue') },
       { path: 'issues', component: () => import('@/features/issues/IssuesPage.vue') },
       {

@@ -207,3 +207,28 @@ async fn counts_the_users_affected_and_finds_issues_by_their_tags() {
     let sorted = ports::IssueQuery { sort: ports::IssueSort::Users, limit: 10, ..Default::default() };
     assert_eq!(t.use_cases.list.execute(sorted).await.unwrap()[0].users, 2);
 }
+
+#[tokio::test]
+async fn sums_up_the_errors_of_a_range() {
+    let t = TestIssues::new();
+    let rules = RedactionRules::default();
+    for id in ["a1", "a2"] {
+        t.use_cases.ingest.execute(scope(), &rules, &policy(), payload(), Some(id)).await.unwrap();
+    }
+    let now = t.clock.now();
+    let query = ports::ActivityQuery {
+        projects: vec![],
+        environments: vec![],
+        from: hours_ago(now, 24),
+        to: now.saturating_add(Duration::from_secs(60)),
+        bucket_seconds: 1800,
+        top: 100,
+    };
+    let overview = t.use_cases.activity.execute(query.clone()).await.unwrap();
+    assert_eq!(overview.bucket_seconds, 3600, "hours at least");
+    assert_eq!(overview.buckets.len(), 25);
+    assert_eq!(overview.events, 2);
+    assert_eq!((overview.new_issues, overview.top[0].events, overview.top[0].users), (1, 2, 1));
+    let staging = ports::ActivityQuery { environments: vec![EnvironmentId::new(3)], ..query };
+    assert_eq!(t.use_cases.activity.execute(staging).await.unwrap().events, 0);
+}

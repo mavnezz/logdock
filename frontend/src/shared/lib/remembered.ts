@@ -6,6 +6,7 @@ import type { LocationQuery, LocationQueryRaw } from 'vue-router'
  * named parameters are links into the page, not choices, and are not kept.
  */
 export const REMEMBERED: Record<string, readonly string[]> = {
+  '/overview': [],
   '/issues': ['page'],
   '/logs': ['trace', 'before'],
   '/performance': ['page'],

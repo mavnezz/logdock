@@ -204,7 +204,12 @@ pub struct Series {
 impl Series {
     const BUCKET_STEPS: [i64; 10] = [60, 300, 600, 900, 1800, 3600, 7200, 21_600, 43_200, 86_400];
 
-    pub async fn execute(&self, query: RollupQuery, name: &str) -> Result<SeriesPage, PerformanceError> {
+    /// `name` `None`: all names of the kind together.
+    pub async fn execute(
+        &self,
+        query: RollupQuery,
+        name: Option<&str>,
+    ) -> Result<SeriesPage, PerformanceError> {
         check(&query)?;
         let span = query.to.unix_seconds() - query.from.unix_seconds();
         let bucket_seconds = Self::BUCKET_STEPS

@@ -4,6 +4,7 @@ mod identity;
 pub(crate) mod issues;
 pub(crate) mod logs;
 mod monitors;
+mod overview;
 mod performance;
 mod projects;
 mod releases;
@@ -19,6 +20,7 @@ use crate::state::ApiState;
 pub(crate) fn v1() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .merge(identity::routes())
+        .merge(overview::routes())
         .merge(accounts::routes())
         .merge(projects::routes())
         .merge(logs::routes())

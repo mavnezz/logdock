@@ -1491,6 +1491,77 @@
         ]
       }
     },
+    "/api/v1/overview": {
+      "get": {
+        "tags": [
+          "overview"
+        ],
+        "summary": "Requests, jobs, errors, logs and scheduled tasks of a range at a glance.",
+        "operationId": "at_a_glance",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; the last 24 hours by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/performance": {
       "get": {
         "tags": [
@@ -2809,6 +2880,88 @@
           "member"
         ]
       },
+      "ActiveIssueDto": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Issue"
+          },
+          {
+            "type": "object",
+            "required": [
+              "events",
+              "users"
+            ],
+            "properties": {
+              "events": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Events in the range.",
+                "minimum": 0
+              },
+              "users": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Users affected, over all its events.",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
+      "Activity": {
+        "type": "object",
+        "description": "Requests or jobs over the range.",
+        "required": [
+          "bucket_seconds",
+          "buckets",
+          "total"
+        ],
+        "properties": {
+          "bucket_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityBucket"
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/Stats",
+            "description": "`flagged` counts the failed ones."
+          }
+        }
+      },
+      "ActivityBucket": {
+        "type": "object",
+        "required": [
+          "start",
+          "count",
+          "failed",
+          "p95_ms"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Failed requests or jobs.",
+            "minimum": 0
+          },
+          "p95_ms": {
+            "type": "number",
+            "format": "double"
+          },
+          "start": {
+            "type": "string"
+          }
+        }
+      },
       "AddEnvironmentRequest": {
         "type": "object",
         "required": [
@@ -3132,6 +3285,72 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "ErrorBucket": {
+        "type": "object",
+        "required": [
+          "start",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "start": {
+            "type": "string"
+          }
+        }
+      },
+      "Errors": {
+        "type": "object",
+        "description": "Error events over the range, and their issues.",
+        "required": [
+          "bucket_seconds",
+          "buckets",
+          "events",
+          "new_issues",
+          "regressed",
+          "top"
+        ],
+        "properties": {
+          "bucket_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Whole hours: events are counted per hour."
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorBucket"
+            }
+          },
+          "events": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "new_issues": {
+            "type": "integer",
+            "format": "int64",
+            "description": "First seen in the range.",
+            "minimum": 0
+          },
+          "regressed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Came back in the range after they were resolved.",
+            "minimum": 0
+          },
+          "top": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveIssueDto"
+            },
+            "description": "The issues with the most events in the range; muted ones left out."
           }
         }
       },
@@ -3849,6 +4068,29 @@
           }
         }
       },
+      "LogActivity": {
+        "type": "object",
+        "required": [
+          "bucket_seconds",
+          "buckets",
+          "total"
+        ],
+        "properties": {
+          "bucket_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HistogramBucket"
+            }
+          },
+          "total": {
+            "$ref": "#/components/schemas/LogLevels"
+          }
+        }
+      },
       "LogEntry": {
         "type": "object",
         "required": [
@@ -3954,6 +4196,49 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "LogLevels": {
+        "type": "object",
+        "required": [
+          "trace",
+          "debug",
+          "info",
+          "warn",
+          "error",
+          "fatal"
+        ],
+        "properties": {
+          "debug": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "error": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "fatal": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "info": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "trace": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "warn": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },
@@ -4136,6 +4421,33 @@
           }
         }
       },
+      "MonitorHealth": {
+        "type": "object",
+        "required": [
+          "total",
+          "ok",
+          "failing"
+        ],
+        "properties": {
+          "failing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Monitor"
+            },
+            "description": "Failing or missed, as they are now."
+          },
+          "ok": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "NamedStats": {
         "allOf": [
           {
@@ -4154,6 +4466,56 @@
             }
           }
         ]
+      },
+      "Overview": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "requests",
+          "jobs",
+          "slowest_routes",
+          "failing_routes",
+          "errors",
+          "logs",
+          "monitors"
+        ],
+        "properties": {
+          "errors": {
+            "$ref": "#/components/schemas/Errors"
+          },
+          "failing_routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NamedStats"
+            }
+          },
+          "from": {
+            "type": "string"
+          },
+          "jobs": {
+            "$ref": "#/components/schemas/Activity"
+          },
+          "logs": {
+            "$ref": "#/components/schemas/LogActivity"
+          },
+          "monitors": {
+            "$ref": "#/components/schemas/MonitorHealth"
+          },
+          "requests": {
+            "$ref": "#/components/schemas/Activity"
+          },
+          "slowest_routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NamedStats"
+            },
+            "description": "The routes with the slowest p95, and those with the most failed\nrequests."
+          },
+          "to": {
+            "type": "string"
+          }
+        }
       },
       "PasswordRequest": {
         "type": "object",
@@ -5380,6 +5742,10 @@
     }
   },
   "tags": [
+    {
+      "name": "overview",
+      "description": "How a project or stage is doing over a range, at a glance"
+    },
     {
       "name": "system",
       "description": "Health, version and storage"

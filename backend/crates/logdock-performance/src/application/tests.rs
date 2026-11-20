@@ -55,10 +55,12 @@ async fn counts_requests_and_what_they_spent_their_time_on() {
     let outgoing = t.use_cases.overview.execute(range(Kind::Outgoing), Order::TotalTime, 50).await.unwrap();
     assert_eq!(outgoing[0].rollup.flagged, 13, "502 from the provider");
 
-    let series = t.use_cases.series.execute(range(Kind::Request), "GET /orders/{order}").await.unwrap();
+    let series = t.use_cases.series.execute(range(Kind::Request), Some("GET /orders/{order}")).await.unwrap();
     assert_eq!(series.bucket_seconds, 60);
     assert_eq!(series.total.count, 3);
     assert!(series.buckets.len() >= 16);
+    let all = t.use_cases.series.execute(range(Kind::Request), None).await.unwrap();
+    assert!(all.total.count > series.total.count, "every request: {}", all.total.count);
 
     let slowest = t
         .use_cases
@@ -100,7 +102,7 @@ async fn refuses_what_it_cannot_read_or_answer() {
     ));
     let mut long = range(Kind::Request);
     long.from = Timestamp::from_unix_seconds(0);
-    assert!(t.use_cases.series.execute(long, "x").await.is_err());
+    assert!(t.use_cases.series.execute(long, Some("x")).await.is_err());
     let query = SampleQuery {
         projects: vec![],
         environments: vec![],

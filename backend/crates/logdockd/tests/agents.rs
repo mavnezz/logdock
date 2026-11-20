@@ -228,6 +228,10 @@ async fn claude_reads_logs_issues_and_traces_through_mcp() {
     assert!(call(&app, &read, "performance", json!({"kind": "request", "since": "1d"})).await.is_ok());
     assert!(call(&app, &read, "list_monitors", json!({})).await.is_ok());
     assert!(call(&app, &read, "list_queues", json!({"since": "1d"})).await.is_ok());
+    let overview = call(&app, &read, "overview", json!({"project": "orders", "since": "1d"})).await.unwrap();
+    assert_eq!(overview["errors"]["events"], 1, "{overview}");
+    assert_eq!(overview["errors"]["top"][0]["title"], "PaymentFailed: Payment for order 42 failed");
+    assert!(overview["requests"].get("buckets").is_none(), "no chart data for Claude");
     let releases = call(&app, &read, "list_releases", json!({"project": "orders"})).await.unwrap();
     assert_eq!(releases[0]["release"], "4f2c1e9", "{releases}");
 

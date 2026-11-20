@@ -249,6 +249,20 @@ pub struct HistogramBucket {
     pub fatal: u64,
 }
 
+impl From<&logs::Bucket> for HistogramBucket {
+    fn from(b: &logs::Bucket) -> Self {
+        Self {
+            start: time(Timestamp::from_unix_seconds(b.start)),
+            trace: b.counts[0],
+            debug: b.counts[1],
+            info: b.counts[2],
+            warn: b.counts[3],
+            error: b.counts[4],
+            fatal: b.counts[5],
+        }
+    }
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Histogram {
     pub bucket_seconds: i64,
@@ -285,21 +299,7 @@ async fn histogram(
     };
     let bucket_seconds = histogram.bucket_seconds;
     let buckets = state.logs.histogram.execute(histogram).await?;
-    Ok(Json(Histogram {
-        bucket_seconds,
-        buckets: buckets
-            .into_iter()
-            .map(|b| HistogramBucket {
-                start: time(Timestamp::from_unix_seconds(b.start)),
-                trace: b.counts[0],
-                debug: b.counts[1],
-                info: b.counts[2],
-                warn: b.counts[3],
-                error: b.counts[4],
-                fatal: b.counts[5],
-            })
-            .collect(),
-    }))
+    Ok(Json(Histogram { bucket_seconds, buckets: buckets.iter().map(HistogramBucket::from).collect() }))
 }
 
 fn now_seconds() -> i64 {

@@ -47,6 +47,7 @@ Logdock available in every project instead of the current one.
 | Tool | What it does |
 |---|---|
 | `list_projects` | projects and their stages; the names the other tools take |
+| `overview` | a project or stage at a glance over a range: requests (failures, p95), jobs, errors with new and returning issues and the busiest ones, the slowest and most failing routes, log entries per level, scheduled tasks in trouble |
 | `search_logs` | log entries, newest first: words, `"phrases"`, `key:value`, level, service, host, trace, `since` (15m, 6h, 2d, 1w) or `from`/`to` |
 | `list_issues` | issues by status, words, tags (`user.email:…`, `url:…`), project and stage; sorted by the users affected too |
 | `get_issue` | an issue with its latest event: exception chain, frames (the app's with their code), request, tags, breadcrumbs, trace ID; the users affected and each tag's most frequent values |

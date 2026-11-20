@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use logdock_kernel::Timestamp;
 
-use super::ports::{EventSummary, IssueQuery, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent};
+use super::ports::{
+    ActiveIssue, ActivityQuery, EventSummary, IssueQuery, IssueSummary, ReleaseCount, ReleaseErrors,
+    StoredEvent,
+};
 use super::{Context, IssueError, hours_ago};
 use crate::domain::{ErrorEvent, Issue, IssueId, IssueSearch, TAG_ORDER, USER, values_kept};
 
@@ -159,6 +162,49 @@ impl SummarizeTags {
             });
         }
         Ok(out)
+    }
+}
+
+/// The errors of a range, every bucket of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ErrorOverview {
+    pub bucket_seconds: i64,
+    /// Every bucket of the range, also the empty ones, oldest first.
+    pub buckets: Vec<(i64, u64)>,
+    pub events: u64,
+    pub new_issues: u64,
+    pub regressed: u64,
+    pub top: Vec<ActiveIssue>,
+}
+
+/// Query: how many errors came over a range, which issues are new or came
+/// back, and which had the most events.
+#[derive(Clone)]
+pub struct IssueActivity {
+    pub(crate) context: Arc<Context>,
+}
+
+impl IssueActivity {
+    pub async fn execute(&self, mut query: ActivityQuery) -> Result<ErrorOverview, IssueError> {
+        query.bucket_seconds = (query.bucket_seconds.max(3600) + 3599) / 3600 * 3600;
+        query.top = query.top.clamp(1, 50);
+        let found = self.context.ports.issues.activity(&query).await?;
+        let step = query.bucket_seconds;
+        let mut buckets = Vec::new();
+        let mut start = query.from.unix_seconds().div_euclid(step) * step;
+        while start < query.to.unix_seconds() {
+            let count = found.buckets.iter().find(|(b, _)| *b == start).map_or(0, |(_, n)| *n);
+            buckets.push((start, count));
+            start += step;
+        }
+        Ok(ErrorOverview {
+            bucket_seconds: step,
+            events: buckets.iter().map(|(_, n)| n).sum(),
+            buckets,
+            new_issues: found.new_issues,
+            regressed: found.regressed,
+            top: found.top,
+        })
     }
 }
 

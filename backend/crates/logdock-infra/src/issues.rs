@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use logdock_issues::application::ports::{
-    EventStore, EventSummary, IssueQuery, IssueRepository, IssueSort, IssueSummary, ReleaseCount,
-    ReleaseErrors, StoredEvent, TagCount, TagKey,
+    ActiveIssue, ActivityQuery, ErrorActivity, EventStore, EventSummary, IssueQuery, IssueRepository,
+    IssueSort, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
 use logdock_issues::domain::{
     ErrorEvent, EventLevel, Issue, IssueId, IssueStatus, NewIssue, USER, tags_of, values_kept,
@@ -279,6 +279,76 @@ impl IssueRepository for SqliteIssues {
             .map_err(port)?;
         }
         tx.commit().await.map_err(port)
+    }
+
+    async fn activity(&self, query: &ActivityQuery) -> Result<ErrorActivity, PortError> {
+        let in_scope = |sql: &mut QueryBuilder<Sqlite>| {
+            if !query.projects.is_empty() {
+                sql.push(" AND i.project_id IN (");
+                let mut list = sql.separated(", ");
+                for project in &query.projects {
+                    list.push_bind(project.get());
+                }
+                list.push_unseparated(")");
+            }
+            if !query.environments.is_empty() {
+                sql.push(" AND i.environment_id IN (");
+                let mut list = sql.separated(", ");
+                for environment in &query.environments {
+                    list.push_bind(environment.get());
+                }
+                list.push_unseparated(")");
+            }
+        };
+        let hours = |sql: &mut QueryBuilder<Sqlite>| {
+            sql.push(" FROM issue_hours h JOIN issues i ON i.id = h.issue_id WHERE h.hour >= ")
+                .push_bind(query.from.hour())
+                .push(" AND h.hour < ")
+                .push_bind(query.to.unix_seconds());
+        };
+        let step = query.bucket_seconds.max(3600);
+        let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT (h.hour / ");
+        sql.push_bind(step).push(") * ").push_bind(step).push(" AS bucket, sum(h.count) AS events");
+        hours(&mut sql);
+        in_scope(&mut sql);
+        sql.push(" GROUP BY bucket ORDER BY bucket");
+        let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
+        let buckets =
+            rows.iter().map(|row| (row.get("bucket"), row.get::<i64, _>("events") as u64)).collect();
+
+        let counted = |column: &str| {
+            let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT count(*) FROM issues i WHERE i.");
+            sql.push(column).push(" >= ").push_bind(query.from.unix_micros());
+            sql.push(" AND i.").push(column).push(" < ").push_bind(query.to.unix_micros());
+            in_scope(&mut sql);
+            sql
+        };
+        let new_issues: i64 =
+            counted("first_seen").build_query_scalar().fetch_one(self.db.pool()).await.map_err(port)?;
+        let regressed: i64 =
+            counted("regressed_at").build_query_scalar().fetch_one(self.db.pool()).await.map_err(port)?;
+
+        let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT ");
+        for column in COLUMNS.split(", ") {
+            sql.push("i.").push(column.trim()).push(", ");
+        }
+        sql.push("sum(h.count) AS events, coalesce((SELECT k.distinct_values FROM issue_tag_keys k WHERE k.issue_id = i.id AND k.key = ")
+            .push_bind(USER)
+            .push("), 0) AS users");
+        hours(&mut sql);
+        in_scope(&mut sql);
+        sql.push(" AND i.status != 'muted' GROUP BY i.id ORDER BY events DESC, i.last_seen DESC LIMIT ")
+            .push_bind(i64::from(query.top));
+        let rows = sql.build().fetch_all(self.db.pool()).await.map_err(port)?;
+        let top = rows
+            .iter()
+            .map(|row| ActiveIssue {
+                issue: issue(row),
+                events: row.get::<i64, _>("events") as u64,
+                users: row.get::<i64, _>("users") as u64,
+            })
+            .collect();
+        Ok(ErrorActivity { buckets, new_issues: new_issues as u64, regressed: regressed as u64, top })
     }
 
     async fn tag_keys(&self, id: IssueId) -> Result<Vec<TagKey>, PortError> {
@@ -885,6 +955,25 @@ mod tests {
         assert_eq!(issues.list(&by(vec![tag("user", "id:9", false, true)]), at).await.unwrap().len(), 1);
         let sorted = IssueQuery { limit: 10, sort: IssueSort::Users, ..Default::default() };
         assert_eq!(issues.list(&sorted, at).await.unwrap()[0].users, 2);
+
+        // What the issues did in a range: events per bucket, the busiest.
+        let activity = ActivityQuery {
+            projects: vec![scope.project],
+            environments: vec![scope.environment],
+            from: Timestamp::from_unix_seconds(at.hour()),
+            to: at.saturating_add(std::time::Duration::from_secs(7200)),
+            bucket_seconds: 3600,
+            top: 5,
+        };
+        let found = issues.activity(&activity).await.unwrap();
+        assert_eq!(found.buckets, [(at.hour(), 2), (at.hour() + 3600, 1)]);
+        assert_eq!((found.new_issues, found.regressed), (1, 0));
+        assert_eq!((found.top.len(), found.top[0].events, found.top[0].users), (1, 3, 2));
+        let daily =
+            issues.activity(&ActivityQuery { bucket_seconds: 86_400, ..activity.clone() }).await.unwrap();
+        assert_eq!(daily.buckets.iter().map(|(_, n)| n).sum::<u64>(), 3);
+        let elsewhere = ActivityQuery { projects: vec![ProjectId::new(9)], ..activity };
+        assert_eq!(issues.activity(&elsewhere).await.unwrap(), ErrorActivity::default());
 
         // Values beyond the most kept are counted for the tag only.
         let many: Vec<(String, String)> =
