@@ -114,3 +114,16 @@ export function useRevokeKey(id: MaybeRefOrGetter<number>) {
     ),
   )
 }
+
+/** How many days the server keeps each kind, for a stage that keeps its own. */
+export function useServerRetention() {
+  return useQuery({
+    queryKey: ['system', 'storage'],
+    queryFn: () => unwrap(api.GET('/api/v1/system/storage')),
+    select: (storage) =>
+      Object.fromEntries(storage.kinds.map((k) => [k.kind, k.retention_days])) as Record<
+        'logs' | 'events' | 'traces',
+        number | undefined
+      >,
+  })
+}

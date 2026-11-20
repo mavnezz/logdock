@@ -142,8 +142,22 @@ async fn stores_projects_stages_keys_and_counts() {
     settings.notify_regressions = false;
     settings.redaction.allowed_keys = Some(vec!["order_id".into()]);
     settings.redaction.scrub_emails = true;
+    let stage = project.environments[0].id;
+    let short = logdock_kernel::retention::StageRetention {
+        logs_days: Some(3),
+        traces_days: Some(1),
+        ..Default::default()
+    };
+    settings.retention = vec![(stage, short)];
     projects.update_settings(project.id, &settings).await.unwrap();
     assert_eq!(projects.find(project.id).await.unwrap().unwrap().settings, settings);
+    let stored: String = sqlx::query_scalar("SELECT settings FROM projects WHERE id = ?")
+        .bind(project.id.get())
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+    assert_eq!(super::projects::stage_retention(&stored), [(stage.get(), short)], "as the segments read it");
+    assert!(super::projects::stage_retention("not json").is_empty());
 
     let keys = SqliteKeys::new(db.clone());
     let tokens = RandomKeys;

@@ -73,6 +73,7 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/features/accounts/AuditPage.vue'),
         meta: { admin: true },
       },
+      { path: 'storage', component: () => import('@/features/system/StoragePage.vue') },
       { path: 'profile', component: () => import('@/features/auth/ProfilePage.vue') },
     ],
   },

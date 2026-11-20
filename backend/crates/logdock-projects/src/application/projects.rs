@@ -125,7 +125,11 @@ impl UpdateProject {
                 return Err(ProjectError::NameTaken);
             }
         }
-        if let Some(settings) = changes.settings {
+        if let Some(mut settings) = changes.settings {
+            // Stages of the project only, and only those that keep their own.
+            settings.retention.retain(|(stage, retention)| {
+                project.environment(*stage).is_some() && !retention.is_default()
+            });
             settings.validate()?;
             p.projects.update_settings(id, &settings).await?;
         }

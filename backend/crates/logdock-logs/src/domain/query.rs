@@ -114,7 +114,7 @@ impl Cursor {
 
     /// Whether `time, id` comes after this cursor in newest-first order.
     pub fn is_before(&self, time: Timestamp, id: LogId) -> bool {
-        (time, id.day, id.row) < (self.time, self.id.day, self.id.row)
+        (time, id.day, id.keep, id.row) < (self.time, self.id.day, self.id.keep, self.id.row)
     }
 }
 
@@ -354,13 +354,14 @@ mod tests {
 
     #[test]
     fn cursors_are_written_read_and_ordered() {
-        let id = LogId { day: Day::from_days(20_000), row: 5 };
+        let id = LogId { day: Day::from_days(20_000), keep: 0, row: 5 };
         let cursor = Cursor { time: Timestamp::from_unix_micros(1_000), id };
         assert_eq!(cursor.to_string(), "1000_20000-5");
         assert_eq!(Cursor::parse("1000_20000-5"), Some(cursor));
         assert_eq!(Cursor::parse("1000"), None);
         assert!(cursor.is_before(Timestamp::from_unix_micros(999), id));
         assert!(cursor.is_before(Timestamp::from_unix_micros(1_000), LogId { row: 4, ..id }));
+        assert!(!cursor.is_before(Timestamp::from_unix_micros(1_000), LogId { keep: 3, row: 4, ..id }));
         assert!(!cursor.is_before(Timestamp::from_unix_micros(1_000), id));
     }
 

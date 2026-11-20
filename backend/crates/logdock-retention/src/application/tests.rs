@@ -8,7 +8,7 @@ use crate::domain::{DeletionReason, Kind, Segment};
 
 struct Fake {
     segments: Mutex<Vec<Segment>>,
-    deleted: Mutex<Vec<(Kind, Day)>>,
+    deleted: Mutex<Vec<Segment>>,
     pruned_before: Mutex<Option<Timestamp>>,
 }
 
@@ -18,14 +18,28 @@ impl SegmentCatalog for Fake {
         Ok(self.segments.lock().unwrap().clone())
     }
 
-    async fn delete(&self, kind: Kind, day: Day) -> Result<(), PortError> {
-        self.segments.lock().unwrap().retain(|s| !(s.kind == kind && s.day == day));
-        self.deleted.lock().unwrap().push((kind, day));
+    async fn delete(&self, segment: Segment) -> Result<(), PortError> {
+        self.segments.lock().unwrap().retain(|s| *s != segment);
+        self.deleted.lock().unwrap().push(segment);
         Ok(())
     }
 
     async fn close_before(&self, _today: Day) -> Result<u32, PortError> {
         Ok(2)
+    }
+
+    async fn measure(&self) -> Result<u32, PortError> {
+        Ok(3)
+    }
+
+    async fn usage(&self) -> Result<Vec<crate::domain::ScopeUsage>, PortError> {
+        Ok(vec![crate::domain::ScopeUsage {
+            project: logdock_kernel::ProjectId::new(1),
+            environment: logdock_kernel::EnvironmentId::new(2),
+            kind: Kind::Logs,
+            rows: 10,
+            bytes: 5,
+        }])
     }
 }
 
@@ -66,7 +80,7 @@ impl Clock for Today {
 
 #[tokio::test]
 async fn deletes_what_ran_out_closes_finished_days_and_reports_storage() {
-    let segment = |kind, day: i64, bytes| Segment { kind, day: Day::from_days(day), bytes };
+    let segment = |kind, day: i64, bytes| Segment { kind, day: Day::from_days(day), keep: 0, bytes };
     let fake = Arc::new(Fake {
         segments: Mutex::new(vec![
             segment(Kind::Logs, 20_010, 5),
@@ -86,7 +100,7 @@ async fn deletes_what_ran_out_closes_finished_days_and_reports_storage() {
     let retention = RetentionUseCases::new(ports, policy);
 
     let report = retention.apply.execute().await.unwrap();
-    assert_eq!(report.closed, 2);
+    assert_eq!((report.closed, report.measured), (2, 3));
     assert_eq!(report.pruned_rollups, 7);
     let deleted: Vec<_> =
         report.deleted.iter().map(|d| (d.segment.kind, d.segment.day.days(), d.reason)).collect();
@@ -96,8 +110,11 @@ async fn deletes_what_ran_out_closes_finished_days_and_reports_storage() {
     );
     assert_eq!(*fake.pruned_before.lock().unwrap(), Some(Day::from_days(20_000).start()));
 
+    assert_eq!(fake.deleted.lock().unwrap().len(), 2);
     let status = retention.status.execute().await.unwrap();
     assert_eq!(status.segment_bytes(), 5);
+    assert_eq!(status.forecast, None, "no full day left to tell the rate");
+    assert_eq!(status.scopes[0].bytes, 5);
     assert_eq!(status.database_bytes, 42);
     assert_eq!(status.free_bytes, None);
 }

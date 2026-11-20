@@ -7,18 +7,17 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
-use logdock_kernel::{Day, PortError, Timestamp};
+use logdock_kernel::{PortError, Timestamp};
 use logdock_logs::application::ports::{LogFeed, LogSink, Submitted};
 use logdock_logs::domain::{LogEntry, LogId};
 use logdock_retention::domain::Kind;
-use sqlx::SqliteConnection;
 use sqlx::sqlite::SqliteConnection as _Connection;
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::health::{WriterHandle, WriterHealth};
 use crate::json::fields_to_json;
-use crate::segments::{Segments, port};
+use crate::segments::{SegmentId, Segments, Writers, port};
 
 #[derive(Debug, Clone, Copy)]
 pub struct WriterConfig {
@@ -78,7 +77,7 @@ impl LogWriter {
             pending: Arc::clone(&pending),
             feed: feed.clone(),
             batch: config.batch.max(1),
-            current: None,
+            writers: Writers::new(Kind::Logs, true),
         };
         let handle = tokio::spawn(task.run());
         (Self { sender, pending, queue: config.queue, feed }, WriterTask { stop, handle })
@@ -126,7 +125,8 @@ struct Task {
     feed: broadcast::Sender<Arc<LogEntry>>,
     batch: usize,
     /// Today's segment and the connection to it.
-    current: Option<(Day, SqliteConnection)>,
+    /// Today's segments: the kind's own and those of stages' own retention.
+    writers: Writers,
 }
 
 impl Task {
@@ -182,48 +182,35 @@ impl Task {
                 }
             }
         }
-        if let Some((_, connection)) = self.current.take() {
-            use sqlx::Connection as _;
-            let _ = connection.close().await;
-        }
-    }
-
-    async fn connection(&mut self, day: Day) -> Result<&mut SqliteConnection, PortError> {
-        if self.current.as_ref().is_none_or(|(current, _)| *current != day) {
-            if let Some((old, connection)) = self.current.take() {
-                use sqlx::Connection as _;
-                let _ = connection.close().await;
-                // The finished day's segment is closed in the background.
-                let segments = Arc::clone(&self.segments);
-                if old < day {
-                    tokio::spawn(async move {
-                        if let Err(error) = segments.close(Kind::Logs, old).await {
-                            tracing::warn!(%error, day = %old, "cannot close the log segment");
-                        }
-                    });
-                }
-            }
-            let connection = self.segments.open_writer(Kind::Logs, day).await?;
-            self.current = Some((day, connection));
-        }
-        Ok(&mut self.current.as_mut().expect("opened above").1)
+        self.writers.close().await;
     }
 
     async fn write(&mut self, entries: &mut [LogEntry]) -> Result<(), PortError> {
-        // By day of receipt: a batch at midnight goes into two segments.
-        let mut days: BTreeMap<Day, Vec<usize>> = BTreeMap::new();
+        // By day of receipt, a batch at midnight going into two; and by the
+        // retention of the entries' stages.
+        let mut keeps: HashMap<i64, u32> = HashMap::new();
+        let mut segments: BTreeMap<SegmentId, Vec<usize>> = BTreeMap::new();
         for (index, entry) in entries.iter().enumerate() {
-            days.entry(entry.received.day()).or_default().push(index);
+            let environment = entry.scope.environment;
+            let keep = match keeps.get(&environment.get()) {
+                Some(keep) => *keep,
+                None => {
+                    let keep = self.segments.keep(Kind::Logs, environment).await?;
+                    keeps.insert(environment.get(), keep);
+                    keep
+                }
+            };
+            segments.entry(SegmentId::new(Kind::Logs, entry.received.day(), keep)).or_default().push(index);
         }
-        for (day, indices) in days {
-            let connection = self.connection(day).await?;
-            write_segment(connection, day, entries, &indices).await?;
+        for (id, indices) in segments {
+            let connection = self.writers.get(&self.segments, id).await?;
+            write_segment(connection, id, entries, &indices).await?;
             let times = indices.iter().map(|i| entries[*i].time);
             let (min, max) = times.fold(
                 (Timestamp::from_unix_micros(i64::MAX), Timestamp::from_unix_micros(i64::MIN)),
                 |(lo, hi), t| (lo.min(t), hi.max(t)),
             );
-            self.segments.note_batch(Kind::Logs, day, indices.len() as i64, min, max).await?;
+            self.segments.note_batch(id, indices.len() as i64, min, max).await?;
         }
         write_counts(&self.segments, entries).await
     }
@@ -231,7 +218,7 @@ impl Task {
 
 async fn write_segment(
     connection: &mut _Connection,
-    day: Day,
+    segment: SegmentId,
     entries: &mut [LogEntry],
     indices: &[usize],
 ) -> Result<(), PortError> {
@@ -272,7 +259,7 @@ async fn write_segment(
             .execute(&mut *tx)
             .await
             .map_err(port)?;
-        entry.id = Some(LogId { day, row: id });
+        entry.id = Some(LogId { day: segment.day, keep: segment.keep, row: id });
     }
     tx.commit().await.map_err(port)
 }

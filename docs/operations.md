@@ -99,7 +99,8 @@ not retried.
 data/
 ├── logdock.db              accounts, projects, keys, issues, counts, segment catalog
 └── segments/
-    ├── logs/2026-11-18.db  one file per day of receipt
+    ├── logs/2026-11-18.db     one file per day of receipt
+    ├── logs/2026-11-18.3d.db  the same day of stages that keep their logs 3 days
     ├── events/…
     └── traces/…
 ```
@@ -107,7 +108,18 @@ data/
 A day's segment is written to until the day is over; within the next hour it is
 closed (its index merged) and never changes again. Retention deletes whole
 segment files (`LOGDOCK_RETENTION_*_DAYS`); above `LOGDOCK_MAX_STORAGE` the oldest
-days go first. The settings page shows what each kind takes.
+days go first.
+
+A stage can keep its logs, errors or traces for days of its own (a project's
+*Settings*, *Retention per stage*): its data goes into files of their own,
+`<day>.<days>d.db`, deleted when those days are over. A changed setting applies
+to data received from then on, within half a minute; what came before stays as
+long as it was going to.
+
+The *Storage* page shows what each day, kind, project and stage takes (each
+stage's share measured every hour), the free disk, and where the data is heading
+at the rate of the last full days: what it settles at, and in how many days the
+storage limit or the disk's reserve (`LOGDOCK_MIN_FREE_DISK`) would be reached.
 
 ## Backup
 
@@ -141,11 +153,11 @@ for kind in logs events traces; do
   mkdir -p "$dst/segments/$kind"
   for file in "$src/segments/$kind"/*.db; do
     name=$(basename "$file")
-    if [ "${name%.db}" = "$today" ]; then
-      sqlite3 "$file" "VACUUM INTO '$dst/segments/$kind/$name'"
-    else
-      cp -p "$file" "$dst/segments/$kind/$name"
-    fi
+    case "$name" in
+      # Today's, also those of stages' own retention (2026-11-20.3d.db).
+      "$today".*) sqlite3 "$file" "VACUUM INTO '$dst/segments/$kind/$name'" ;;
+      *) cp -p "$file" "$dst/segments/$kind/$name" ;;
+    esac
   done
 done
 ```

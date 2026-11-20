@@ -24,6 +24,7 @@ const de: Messages = {
   },
   nav: {
     overview: 'Übersicht',
+    storage: 'Speicher',
     releases: 'Releases',
     queues: 'Queues',
     menu: 'Menü',
@@ -526,7 +527,45 @@ const de: Messages = {
     copy: 'Kopieren',
     copied: 'Kopiert',
   },
+  storage: {
+    title: 'Speicher',
+    description:
+      'Wie viel Platz die Daten belegen, pro Tag, Art und Stage, wie lange sie bleiben und wohin es geht.',
+    used: 'Belegt',
+    database: 'davon {size} die Hauptdatenbank',
+    limit: 'Speicherlimit',
+    noLimit: 'keins',
+    ofLimit: '{share} % des Limits belegt',
+    free: 'Frei auf der Platte',
+    reserve: 'unter {size} nimmt Logdock nichts mehr an',
+    perDayAverage: 'Pro Tag',
+    settles: 'pendelt sich bei etwa {size} ein',
+    noForecast: 'bekannt nach dem ersten vollen Tag',
+    diskFull:
+      'Bei dieser Rate ist die Platte in {n} Tag bis auf die Reserve voll, dann nimmt Logdock nichts mehr an. Aufbewahrung senken oder Platz schaffen. | Bei dieser Rate ist die Platte in {n} Tagen bis auf die Reserve voll, dann nimmt Logdock nichts mehr an. Aufbewahrung senken oder Platz schaffen.',
+    limitReached:
+      'Bei dieser Rate ist das Speicherlimit in {n} Tag erreicht; ab dann werden die ältesten Tage vor ihrer Zeit gelöscht. | Bei dieser Rate ist das Speicherlimit in {n} Tagen erreicht; ab dann werden die ältesten Tage vor ihrer Zeit gelöscht.',
+    perDay: 'Pro Empfangstag',
+    byKind: 'Nach Art',
+    kind: 'Art',
+    kept: 'Aufbewahrt',
+    oldest: 'Ältester Tag',
+    size: 'Größe',
+    kinds: { logs: 'Logs', events: 'Fehler', traces: 'Traces' },
+    days: '{n} Tag | {n} Tage',
+    byStage: 'Nach Projekt und Stage',
+    byStageHint:
+      'Der Anteil jeder Stage an den Dateien, nach der Größe ihrer Einträge; stündlich gemessen. Eine Stage mit eigener Aufbewahrung hat eigene Dateien; einstellen unter Projekte → Einstellungen.',
+    notMeasured: 'Noch nicht gemessen: innerhalb der Stunde nach dem Start.',
+    stage: 'Stage',
+    total: 'Zusammen',
+    own: 'eigene',
+    rows: '{n} Einträge, Events und Transaktionen insgesamt',
+  },
   settings: {
+    retention: 'Aufbewahrung pro Stage',
+    retentionHint:
+      'Wie viele Tage eine Stage ihre Logs, Fehler und Traces behält, 1 bis 3650; leer behält sie so lange, wie der Server sagt. Eine Stage mit eigenen Tagen bekommt eigene Dateien, ihre Daten verschwinden also, wenn ihre Tage um sind. Gilt für Daten, die ab jetzt ankommen.',
     performance: 'Performance-Issues',
     performanceHint:
       'Ein Request, Job oder eine Query über der Schwelle sowie dieselbe Query immer wieder (N+1) werden zu Issues und wie neue per Mail gemeldet. In Millisekunden; leer ist aus.',

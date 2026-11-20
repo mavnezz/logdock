@@ -10,12 +10,15 @@ import { Input } from '@/shared/ui/input'
 import { FormField } from '@/shared/ui/page'
 import { Switch } from '@/shared/ui/switch'
 
-import { useTestMail, useUpdateProject } from './api'
+import { useServerRetention, useTestMail, useUpdateProject } from './api'
 
 const props = defineProps<{ project: Project }>()
 const { t } = useI18n()
 const update = useUpdateProject(() => props.project.id)
 const testMail = useTestMail(() => props.project.id)
+const server = useServerRetention()
+const KINDS = ['logs', 'events', 'traces'] as const
+type Kept = Record<(typeof KINDS)[number], string>
 
 const lines = (values: string[] | null | undefined) => (values ?? []).join('\n')
 const list = (text: string) =>
@@ -45,9 +48,24 @@ function thresholds(text: string) {
     .filter((t): t is { name: string; ms: number } => t !== null)
 }
 
+/** Days as typed; empty keeps the server's. */
+const days = (text: string) => {
+  const value = Number.parseInt(text, 10)
+  return Number.isFinite(value) ? value : null
+}
+const daysText = (value: number | null | undefined) => (value == null ? '' : String(value))
+
 function fromProject(project: Project) {
   const s = project.settings
   const p = s.performance
+  const kept = (environment: number): Kept => {
+    const own = (s.retention ?? []).find((r) => r.environment_id === environment)
+    return {
+      logs: daysText(own?.logs_days),
+      events: daysText(own?.events_days),
+      traces: daysText(own?.traces_days),
+    }
+  }
   return {
     name: project.name,
     notify: lines(s.notify),
@@ -64,6 +82,10 @@ function fromProject(project: Project) {
     slowQueryMs: msText(p?.slow_query_ms),
     nPlusOne: p?.n_plus_one ?? true,
     overrides: (p?.overrides ?? []).map((o) => `${o.name} = ${o.ms}`).join('\n'),
+    retention: Object.fromEntries(project.environments.map((e) => [e.id, kept(e.id)])) as Record<
+      number,
+      Kept
+    >,
   }
 }
 
@@ -96,6 +118,17 @@ async function save(): Promise<void> {
         n_plus_one: form.nPlusOne,
         overrides: thresholds(form.overrides),
       },
+      retention: props.project.environments
+        .map((e) => {
+          const kept = form.retention[e.id]
+          return {
+            environment_id: e.id,
+            logs_days: kept ? days(kept.logs) : null,
+            events_days: kept ? days(kept.events) : null,
+            traces_days: kept ? days(kept.traces) : null,
+          }
+        })
+        .filter((r) => r.logs_days != null || r.events_days != null || r.traces_days != null),
     },
   })
   saved.value = true
@@ -229,6 +262,42 @@ async function save(): Promise<void> {
       <label class="flex items-center gap-3 text-sm"
         ><Switch v-model="form.nPlusOne" />{{ t('settings.nPlusOne') }}</label
       >
+    </fieldset>
+
+    <fieldset class="grid gap-3">
+      <legend class="mb-1 font-medium">{{ t('settings.retention') }}</legend>
+      <p class="text-sm text-muted-foreground">{{ t('settings.retentionHint') }}</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm" :aria-label="t('settings.retention')">
+          <thead class="text-xs text-muted-foreground">
+            <tr>
+              <th class="py-1 pr-3 text-left font-medium">{{ t('storage.stage') }}</th>
+              <th v-for="kind in KINDS" :key="kind" class="px-1 py-1 text-left font-medium">
+                {{ t(`storage.kinds.${kind}`) }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="environment in project.environments" :key="environment.id">
+              <td class="py-1 pr-3 font-mono">{{ environment.name }}</td>
+              <td v-for="kind in KINDS" :key="kind" class="px-1 py-1">
+                <Input
+                  v-if="form.retention[environment.id]"
+                  v-model="form.retention[environment.id]![kind]"
+                  class="w-24"
+                  inputmode="numeric"
+                  :aria-label="`${environment.name}: ${t(`storage.kinds.${kind}`)}`"
+                  :placeholder="
+                    server.data.value?.[kind] != null
+                      ? t('storage.days', { n: server.data.value[kind] }, server.data.value[kind]!)
+                      : ''
+                  "
+                />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </fieldset>
 
     <Alert v-if="update.error.value" variant="destructive">{{

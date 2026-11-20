@@ -1,4 +1,5 @@
 use logdock_kernel::Day;
+pub use logdock_kernel::retention::StageRetention;
 
 /// The kinds of data kept in day segments (docs/architecture.md, 5.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,6 +22,17 @@ impl Kind {
 
     pub fn parse(text: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.as_str() == text)
+    }
+
+    /// The segments a stage's data of this kind goes into: those of the
+    /// days it keeps it, 0 for the kind's own.
+    pub fn kept_by(self, stage: &StageRetention) -> u32 {
+        match self {
+            Self::Logs => stage.logs_days,
+            Self::Events => stage.events_days,
+            Self::Traces => stage.traces_days,
+        }
+        .unwrap_or(0)
     }
 
     /// Under the storage limit, what goes first among segments of the same
@@ -72,19 +84,28 @@ impl RetentionPolicy {
         }
     }
 
-    /// The oldest day of `kind` still kept on `today`: `days` days including
-    /// today.
-    pub fn oldest_kept(&self, kind: Kind, today: Day) -> Day {
-        let days = i64::from(self.days(kind).max(1));
+    /// How long a segment of `kind` is kept: `keep` days, which its stages
+    /// chose, or the kind's own (`keep` 0).
+    pub fn days_kept(&self, kind: Kind, keep: u32) -> u32 {
+        if keep > 0 { keep } else { self.days(kind) }
+    }
+
+    /// The oldest day of a segment of `kind` and `keep` still kept on
+    /// `today`: its days including today.
+    pub fn oldest_kept(&self, kind: Kind, keep: u32, today: Day) -> Day {
+        let days = i64::from(self.days_kept(kind, keep).max(1));
         Day::from_days(today.days() - days + 1)
     }
 }
 
-/// One day's segment of one kind.
+/// One day's segment of one kind. The data of stages with a retention of
+/// their own is kept in segments of their own, so that it goes when its
+/// days are over: `keep` days, or 0 for the kind's own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Segment {
     pub kind: Kind,
     pub day: Day,
+    pub keep: u32,
     pub bytes: u64,
 }
 
@@ -118,7 +139,7 @@ pub fn plan_deletions(policy: &RetentionPolicy, segments: &[Segment], today: Day
     let mut deletions = Vec::new();
     let mut kept = Vec::new();
     for segment in segments {
-        if segment.day < policy.oldest_kept(segment.kind, today) && segment.day < today {
+        if segment.day < policy.oldest_kept(segment.kind, segment.keep, today) && segment.day < today {
             deletions.push(Deletion { segment: *segment, reason: DeletionReason::Expired });
         } else {
             kept.push(*segment);
@@ -151,7 +172,7 @@ mod tests {
     }
 
     fn segment(kind: Kind, offset: i64, bytes: u64) -> Segment {
-        Segment { kind, day: day(offset), bytes }
+        Segment { kind, day: day(offset), keep: 0, bytes }
     }
 
     fn policy(max: u64) -> RetentionPolicy {
@@ -191,6 +212,21 @@ mod tests {
     }
 
     #[test]
+    fn keeps_a_stages_segments_as_long_as_it_chose() {
+        let short = |offset| Segment { keep: 2, ..segment(Kind::Logs, offset, 1) };
+        let long = |offset| Segment { keep: 7, ..segment(Kind::Logs, offset, 1) };
+        let segments = [short(-1), short(-2), segment(Kind::Logs, -2, 1), long(-6), long(-7)];
+        let deleted: Vec<_> = plan_deletions(&policy(0), &segments, day(0))
+            .into_iter()
+            .map(|d| (d.segment.keep, d.segment.day))
+            .collect();
+        assert_eq!(deleted, [(2, day(-2)), (7, day(-7))], "the kind's own 3 days keep day -2");
+
+        let stage = StageRetention { logs_days: Some(2), ..Default::default() };
+        assert_eq!([Kind::Logs, Kind::Events, Kind::Traces].map(|k| k.kept_by(&stage)), [2, 0, 0]);
+    }
+
+    #[test]
     fn deletes_the_oldest_until_below_the_limit_but_never_today() {
         let segments = [
             segment(Kind::Logs, 0, 50),
@@ -218,7 +254,8 @@ mod tests {
         assert_eq!(Kind::parse("spans"), None);
         let defaults = RetentionPolicy::default();
         assert_eq!(defaults.days(Kind::Logs), 30);
-        assert_eq!(defaults.oldest_kept(Kind::Logs, day(0)), day(-29));
+        assert_eq!(defaults.oldest_kept(Kind::Logs, 0, day(0)), day(-29));
+        assert_eq!(defaults.oldest_kept(Kind::Logs, 3, day(0)), day(-2), "a stage's own");
         assert_eq!(DeletionReason::Expired.as_str(), "expired");
         assert_eq!(DeletionReason::StorageLimit.as_str(), "storage_limit");
     }

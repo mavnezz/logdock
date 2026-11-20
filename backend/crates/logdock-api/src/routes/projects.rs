@@ -9,6 +9,7 @@ use axum::http::StatusCode;
 use logdock_identity::domain::Permission;
 use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
+use logdock_kernel::retention::StageRetention;
 use logdock_kernel::{EnvironmentId, ProjectId};
 use logdock_projects::application::ProjectChanges;
 use logdock_projects::domain::{self as projects, IngestKey, KeyId, NotifyAddress, ProjectSettings};
@@ -103,6 +104,20 @@ impl From<&PerformanceRules> for Performance {
     }
 }
 
+/// A stage that keeps its data for days of its own; a kind left out (or
+/// `null`) is kept as long as the server's setting says. Applies to data
+/// received from then on.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct Retention {
+    pub environment_id: i64,
+    #[serde(default)]
+    pub logs_days: Option<u32>,
+    #[serde(default)]
+    pub events_days: Option<u32>,
+    #[serde(default)]
+    pub traces_days: Option<u32>,
+}
+
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Settings {
     /// Who gets e-mail about the project's errors, also people without an
@@ -114,6 +129,9 @@ pub struct Settings {
     pub redaction: Redaction,
     #[serde(default)]
     pub performance: Performance,
+    /// Stages that keep their data for 1 to 3650 days of their own.
+    #[serde(default)]
+    pub retention: Vec<Retention>,
 }
 
 impl From<&ProjectSettings> for Settings {
@@ -130,6 +148,16 @@ impl From<&ProjectSettings> for Settings {
                 scrub_ip_addresses: settings.redaction.scrub_ip_addresses,
             },
             performance: Performance::from(&settings.performance),
+            retention: settings
+                .retention
+                .iter()
+                .map(|(stage, r)| Retention {
+                    environment_id: stage.get(),
+                    logs_days: r.logs_days,
+                    events_days: r.events_days,
+                    traces_days: r.traces_days,
+                })
+                .collect(),
         }
     }
 }
@@ -171,6 +199,18 @@ impl Settings {
                 n_plus_one: self.performance.n_plus_one,
                 slow_query_ms: self.performance.slow_query_ms.filter(|ms| *ms > 0),
             },
+            retention: self
+                .retention
+                .into_iter()
+                .map(|r| {
+                    let retention = StageRetention {
+                        logs_days: r.logs_days,
+                        events_days: r.events_days,
+                        traces_days: r.traces_days,
+                    };
+                    (EnvironmentId::new(r.environment_id), retention)
+                })
+                .collect(),
         })
     }
 }

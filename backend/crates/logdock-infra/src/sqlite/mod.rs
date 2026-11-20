@@ -7,7 +7,7 @@ mod api_tokens;
 mod audit;
 mod ingest_counts;
 mod keys;
-mod projects;
+pub(crate) mod projects;
 #[cfg(test)]
 pub(crate) mod repository_tests;
 mod sessions;

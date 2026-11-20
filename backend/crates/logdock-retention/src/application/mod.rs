@@ -42,10 +42,15 @@ impl RetentionUseCases {
             apply: ApplyRetention {
                 catalog: Arc::clone(&ports.catalog),
                 housekeeping: ports.housekeeping,
+                clock: Arc::clone(&ports.clock),
+                policy,
+            },
+            status: GetStorageStatus {
+                catalog: ports.catalog,
+                probe: ports.probe,
                 clock: ports.clock,
                 policy,
             },
-            status: GetStorageStatus { catalog: ports.catalog, probe: ports.probe, policy },
         }
     }
 }

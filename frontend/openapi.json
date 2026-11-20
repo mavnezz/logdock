@@ -2728,7 +2728,7 @@
         "tags": [
           "system"
         ],
-        "summary": "How much each kind of data takes, and the limits.",
+        "summary": "How much each kind of data takes, per day, project and stage, where it\nis heading, and the limits.",
         "operationId": "storage",
         "responses": {
           "200": {
@@ -4897,6 +4897,43 @@
         },
         "additionalProperties": false
       },
+      "Retention": {
+        "type": "object",
+        "description": "A stage that keeps its data for days of its own; a kind left out (or\n`null`) is kept as long as the server's setting says. Applies to data\nreceived from then on.",
+        "required": [
+          "environment_id"
+        ],
+        "properties": {
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "events_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "logs_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "traces_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "Sample": {
         "type": "object",
         "required": [
@@ -4972,6 +5009,41 @@
           "read",
           "triage"
         ]
+      },
+      "SegmentUsage": {
+        "type": "object",
+        "description": "One segment: a kind's data of one day of receipt.",
+        "required": [
+          "day",
+          "kind",
+          "retention_days",
+          "own_retention",
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "day": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "own_retention": {
+            "type": "boolean",
+            "description": "Whether its stages keep their data for days of their own."
+          },
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Days it is kept: its stages' own retention, or the kind's.",
+            "minimum": 0
+          }
+        }
       },
       "SeriesBucket": {
         "allOf": [
@@ -5067,6 +5139,13 @@
           },
           "redaction": {
             "$ref": "#/components/schemas/Redaction"
+          },
+          "retention": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Retention"
+            },
+            "description": "Stages that keep their data for 1 to 3650 days of their own."
           }
         }
       },
@@ -5182,6 +5261,41 @@
           }
         }
       },
+      "StageUsage": {
+        "type": "object",
+        "description": "What one project's stage takes of one kind, over the days kept.",
+        "required": [
+          "project_id",
+          "environment_id",
+          "kind",
+          "rows",
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Its share of the segments, by the size of its rows; measured every\nhour.",
+            "minimum": 0
+          },
+          "environment_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "project_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "rows": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "Stats": {
         "type": "object",
         "description": "What a range of one name adds up to.",
@@ -5238,6 +5352,8 @@
         "type": "object",
         "required": [
           "kinds",
+          "segments",
+          "stages",
           "segment_bytes",
           "max_storage_bytes",
           "database_bytes",
@@ -5249,6 +5365,17 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "forecast": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/StorageForecast",
+                "description": "`null` before the first full day."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "free_bytes": {
             "type": [
@@ -5284,6 +5411,66 @@
           "segment_bytes": {
             "type": "integer",
             "format": "int64",
+            "minimum": 0
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SegmentUsage"
+            },
+            "description": "Every segment, oldest day first."
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageUsage"
+            },
+            "description": "Per project and stage, the largest first."
+          }
+        }
+      },
+      "StorageForecast": {
+        "type": "object",
+        "description": "Where the data is heading at the rate of the last full days.",
+        "required": [
+          "days",
+          "daily_bytes",
+          "settled_bytes"
+        ],
+        "properties": {
+          "daily_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The full days the rate is taken from, at most 7.",
+            "minimum": 0
+          },
+          "disk_in_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days until the disk is down to its reserve, if it will be.",
+            "minimum": 0
+          },
+          "limit_in_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Days until the storage limit, if it will be reached; from then the\noldest days go before their time.",
+            "minimum": 0
+          },
+          "settled_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "What is kept once each kind and stage keeps as many days as its\nretention says.",
             "minimum": 0
           }
         }

@@ -11,6 +11,8 @@ use crate::domain::{Deletion, RetentionPolicy, StorageStatus, plan_deletions};
 pub struct RetentionReport {
     pub deleted: Vec<Deletion>,
     pub closed: u32,
+    /// Segments whose use per project and stage was measured.
+    pub measured: u32,
     pub pruned_rollups: u64,
 }
 
@@ -33,18 +35,20 @@ impl ApplyRetention {
         let deletions = plan_deletions(&self.policy, &segments, today);
         for deletion in &deletions {
             let segment = deletion.segment;
-            self.catalog.delete(segment.kind, segment.day).await?;
+            self.catalog.delete(segment).await?;
             tracing::info!(
                 kind = segment.kind.as_str(),
                 day = %segment.day,
+                keep = segment.keep,
                 bytes = segment.bytes,
                 reason = deletion.reason.as_str(),
                 "segment deleted"
             );
         }
+        let measured = self.catalog.measure().await?;
         let keep = Duration::from_secs(u64::from(self.policy.rollups_days.max(1)) * 86_400);
         let pruned_rollups = self.housekeeping.prune_rollups(now.saturating_sub(keep)).await?;
-        Ok(RetentionReport { deleted: deletions, closed, pruned_rollups })
+        Ok(RetentionReport { deleted: deletions, closed, measured, pruned_rollups })
     }
 }
 
@@ -53,6 +57,7 @@ impl ApplyRetention {
 pub struct GetStorageStatus {
     pub(crate) catalog: Arc<dyn SegmentCatalog>,
     pub(crate) probe: Arc<dyn StorageProbe>,
+    pub(crate) clock: Arc<dyn Clock>,
     pub(crate) policy: RetentionPolicy,
 }
 
@@ -61,6 +66,8 @@ impl GetStorageStatus {
         let segments = self.catalog.segments().await?;
         let database = self.probe.database_bytes().await?;
         let free = self.probe.free_bytes().await.ok();
-        Ok(StorageStatus::new(self.policy, &segments, database, free))
+        let mut status = StorageStatus::new(self.policy, &segments, database, free, self.clock.now().day());
+        status.scopes = self.catalog.usage().await?;
+        Ok(status)
     }
 }

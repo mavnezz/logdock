@@ -23,6 +23,7 @@ const en = {
   },
   nav: {
     overview: 'Overview',
+    storage: 'Storage',
     releases: 'Releases',
     queues: 'Queues',
     menu: 'Menu',
@@ -521,7 +522,45 @@ const en = {
     copy: 'Copy',
     copied: 'Copied',
   },
+  storage: {
+    title: 'Storage',
+    description:
+      'What the data takes, per day, kind and stage, how long it is kept, and where it is heading.',
+    used: 'In use',
+    database: 'of it {size} the main database',
+    limit: 'Storage limit',
+    noLimit: 'none',
+    ofLimit: '{share} % of the limit in use',
+    free: 'Free on the disk',
+    reserve: 'ingest stops below {size}',
+    perDayAverage: 'Per day',
+    settles: 'settles at about {size}',
+    noForecast: 'known after the first full day',
+    diskFull:
+      'At this rate the disk is down to its reserve in {n} day, and ingest stops. Lower the retention or make room. | At this rate the disk is down to its reserve in {n} days, and ingest stops. Lower the retention or make room.',
+    limitReached:
+      'At this rate the storage limit is reached in {n} day; from then the oldest days are deleted before their time. | At this rate the storage limit is reached in {n} days; from then the oldest days are deleted before their time.',
+    perDay: 'Per day of receipt',
+    byKind: 'By kind',
+    kind: 'Kind',
+    kept: 'Kept',
+    oldest: 'Oldest day',
+    size: 'Size',
+    kinds: { logs: 'Logs', events: 'Errors', traces: 'Traces' },
+    days: '{n} day | {n} days',
+    byStage: 'By project and stage',
+    byStageHint:
+      'Each stage’s share of the files, by the size of its entries; measured every hour. A stage that keeps its data for days of its own has files of its own and is set under Projects → Settings.',
+    notMeasured: 'Not measured yet: within the hour after the start.',
+    stage: 'Stage',
+    total: 'Together',
+    own: 'own',
+    rows: '{n} entries, events and transactions in all',
+  },
   settings: {
+    retention: 'Retention per stage',
+    retentionHint:
+      'How many days a stage keeps its logs, errors and traces, 1 to 3650; empty keeps them as long as the server says. A stage with days of its own gets files of its own, so its data goes when its days are over. Applies to data received from now on.',
     performance: 'Performance issues',
     performanceHint:
       'A request, job or query over its threshold, and the same query run again and again (N+1), become issues and are mailed as new ones. In milliseconds; empty is off.',

@@ -111,7 +111,7 @@ async fn writes_entries_and_finds_them_newest_first_across_days() {
     let id = found.entries[0].id.unwrap();
     let got = store.get(id).await.unwrap().unwrap();
     assert_eq!(got.attributes[1].1.as_str(), Some("ada@example.com"));
-    assert!(store.get(LogId { day: Day::from_days(1), row: 1 }).await.unwrap().is_none());
+    assert!(store.get(LogId { day: Day::from_days(1), keep: 0, row: 1 }).await.unwrap().is_none());
 
     let histogram = HistogramQuery {
         from: Timestamp::from_unix_seconds(DAY),
@@ -186,7 +186,11 @@ async fn benchmark() {
         assert_eq!(writer.submit(batch, wait).await.unwrap(), Submitted::Accepted);
     }
     let elapsed = started.elapsed();
-    let bytes = segments.bytes(logdock_retention::domain::Kind::Logs, Day::from_days(20_000));
+    let bytes = segments.bytes(crate::segments::SegmentId::new(
+        logdock_retention::domain::Kind::Logs,
+        Day::from_days(20_000),
+        0,
+    ));
     let store = SegmentLogStore::new(Arc::clone(&segments));
     let search = std::time::Instant::now();
     let found = store

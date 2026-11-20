@@ -10,6 +10,7 @@ mod mail;
 pub mod performance;
 pub mod redaction;
 mod request;
+pub mod retention;
 mod secret;
 mod time;
 mod value;

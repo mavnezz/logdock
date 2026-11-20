@@ -21,6 +21,18 @@ export function formatDateTime(iso: string | null | undefined): string {
   })
 }
 
+/** A day (`YYYY-MM-DD`, UTC) as the language writes it: `20 Nov 2026`. */
+export function formatDay(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return day
+  return date.toLocaleDateString(locale(), {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 /** Time of day with milliseconds, for log lines. */
 export function formatTime(iso: string): string {
   const date = new Date(iso)

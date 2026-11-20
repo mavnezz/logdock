@@ -399,6 +399,13 @@ async function main() {
     expect(sent >= 1, `no entries counted for Fluent Bit's key`)
     return `${JSON.stringify(line.message)}; ${sent} entries with Fluent Bit's key`
   })
+  await check('the storage page knows each kind and the days kept', async () => {
+    const storage = await logdock.get('/api/v1/system/storage')
+    const kinds = storage.kinds.filter((k) => k.bytes > 0).map((k) => k.kind)
+    expect(['logs', 'events', 'traces'].every((k) => kinds.includes(k)), `kinds ${kinds}`)
+    expect(storage.segments.length >= 3, `${storage.segments.length} segments`)
+    return `${storage.segments.length} segments, ${storage.segment_bytes} bytes`
+  })
   await check('ingest refused nothing', async () => {
     const counts = await logdock.get(`/api/v1/projects/${project.id}/ingest`)
     const refused = counts.filter((c) => Object.keys(c.rejected).length > 0)

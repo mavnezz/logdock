@@ -4,24 +4,34 @@ use logdock_kernel::{Day, Scope, Timestamp, Value};
 
 use super::Level;
 
-/// Where an entry is kept: the day segment it was written to, and its row
-/// there. Written as `<days since the epoch>-<row>`.
+/// Where an entry is kept: the day segment it was written to, the
+/// retention of that segment (`keep` days of its stage, 0 for the kind's
+/// own), and its row there. Written as `<days since the epoch>-<row>`, or
+/// `<days>.<keep>-<row>` in a stage's own segment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LogId {
     pub day: Day,
+    pub keep: u32,
     pub row: i64,
 }
 
 impl LogId {
     pub fn parse(text: &str) -> Option<Self> {
-        let (day, row) = text.split_once('-')?;
-        Some(Self { day: Day::from_days(day.parse().ok()?), row: row.parse().ok()? })
+        let (segment, row) = text.split_once('-')?;
+        let (day, keep) = match segment.split_once('.') {
+            Some((day, keep)) => (day, keep.parse().ok().filter(|k| *k > 0)?),
+            None => (segment, 0),
+        };
+        Some(Self { day: Day::from_days(day.parse().ok()?), keep, row: row.parse().ok()? })
     }
 }
 
 impl fmt::Display for LogId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}-{}", self.day.days(), self.row)
+        match self.keep {
+            0 => write!(f, "{}-{}", self.day.days(), self.row),
+            keep => write!(f, "{}.{keep}-{}", self.day.days(), self.row),
+        }
     }
 }
 
@@ -179,10 +189,13 @@ mod tests {
 
     #[test]
     fn ids_are_written_and_read() {
-        let id = LogId { day: Day::from_days(20_410), row: 17 };
+        let id = LogId { day: Day::from_days(20_410), keep: 0, row: 17 };
         assert_eq!(id.to_string(), "20410-17");
         assert_eq!(LogId::parse("20410-17"), Some(id));
-        for bad in ["", "20410", "x-1", "1-y"] {
+        let own = LogId { keep: 3, ..id };
+        assert_eq!(own.to_string(), "20410.3-17");
+        assert_eq!(LogId::parse("20410.3-17"), Some(own));
+        for bad in ["", "20410", "x-1", "1-y", "20410.0-17", "20410.x-17"] {
             assert_eq!(LogId::parse(bad), None, "{bad}");
         }
     }

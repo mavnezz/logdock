@@ -9,17 +9,18 @@ mod writer;
 pub use store::{SegmentLogStore, SqliteLogStats};
 pub use writer::{LogWriter, WriterConfig, WriterTask};
 
-use logdock_kernel::{Day, EnvironmentId, ProjectId, Scope, Timestamp};
+use logdock_kernel::{EnvironmentId, ProjectId, Scope, Timestamp};
 use logdock_logs::domain::{Level, LogEntry, LogId};
 use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
 
 use crate::json::fields_from_json;
+use crate::segments::SegmentId;
 
 /// An entry as read back from its segment.
-fn entry(day: Day, row: &SqliteRow) -> LogEntry {
+fn entry(segment: SegmentId, row: &SqliteRow) -> LogEntry {
     LogEntry {
-        id: Some(LogId { day, row: row.get("id") }),
+        id: Some(LogId { day: segment.day, keep: segment.keep, row: row.get("id") }),
         scope: Scope {
             project: ProjectId::new(row.get("project_id")),
             environment: EnvironmentId::new(row.get("environment_id")),

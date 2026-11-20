@@ -14,11 +14,11 @@ use logdock_issues::domain::{
 use logdock_kernel::{Day, EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
 use logdock_retention::domain::Kind;
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Connection, QueryBuilder, Row, Sqlite, SqliteConnection};
+use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 use tokio::sync::Mutex;
 
 use crate::json::{from_json, packed, to_json, unpacked};
-use crate::segments::Segments;
+use crate::segments::{SegmentId, Segments, Writers};
 use crate::sqlite::Database;
 
 fn port(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> PortError {
@@ -550,8 +550,15 @@ pub async fn backfill_tags(db: &Database, segments: &Segments) -> Result<u64, Po
         return Ok(0);
     };
     let mut counted = 0;
-    let mut days: Vec<Day> =
-        segments.all().await?.into_iter().filter(|s| s.kind == Kind::Events).map(|s| s.day).collect();
+    // Events from before were kept in the kind's own segments: stages had
+    // no retention of their own yet.
+    let mut days: Vec<Day> = segments
+        .all()
+        .await?
+        .into_iter()
+        .filter(|s| s.kind == Kind::Events && s.keep == 0)
+        .map(|s| s.day)
+        .collect();
     days.retain(|day| day.days() >= state.day && *day <= Timestamp::from_unix_micros(state.since).day());
     days.sort();
     for day in days {
@@ -559,7 +566,7 @@ pub async fn backfill_tags(db: &Database, segments: &Segments) -> Result<u64, Po
             state.day = day.days();
             state.id = 0;
         }
-        let Some(pool) = segments.reader(Kind::Events, day).await? else { continue };
+        let Some(pool) = segments.reader(SegmentId::new(Kind::Events, day, 0)).await? else { continue };
         loop {
             let rows = sqlx::query(
                 "SELECT id, issue_id, time, data FROM events WHERE id > ? AND received < ? ORDER BY id LIMIT ?",
@@ -617,23 +624,22 @@ async fn save_backfill(tx: &mut SqliteConnection, state: &Backfill) -> Result<()
 #[derive(Debug)]
 pub struct SegmentEvents {
     segments: Arc<Segments>,
-    /// Today's segment and the connection to it.
-    writer: Mutex<Option<(Day, SqliteConnection)>>,
+    /// Today's segments and the connections to them.
+    writers: Mutex<Writers>,
 }
 
 impl SegmentEvents {
     pub fn new(segments: Arc<Segments>) -> Self {
-        Self { segments, writer: Mutex::new(None) }
+        Self { segments, writers: Mutex::new(Writers::new(Kind::Events, false)) }
     }
 
     pub async fn close(&self) {
-        if let Some((_, connection)) = self.writer.lock().await.take() {
-            let _ = connection.close().await;
-        }
+        self.writers.lock().await.close().await;
     }
 
-    async fn days(&self) -> Result<Vec<Day>, PortError> {
-        Ok(self.segments.overlapping(Kind::Events, None, None).await?.into_iter().map(|s| s.day).collect())
+    /// Every segment with events, newest first.
+    async fn segments(&self) -> Result<Vec<SegmentId>, PortError> {
+        Ok(self.segments.overlapping(Kind::Events, None, None).await?.iter().map(|s| s.id()).collect())
     }
 }
 
@@ -689,15 +695,10 @@ impl EventStore for SegmentEvents {
         time: Timestamp,
         received: Timestamp,
     ) -> Result<(), PortError> {
-        let day = received.day();
-        let mut writer = self.writer.lock().await;
-        if writer.as_ref().is_none_or(|(current, _)| *current != day) {
-            if let Some((_, old)) = writer.take() {
-                let _ = old.close().await;
-            }
-            *writer = Some((day, self.segments.open_writer(Kind::Events, day).await?));
-        }
-        let (_, connection) = writer.as_mut().expect("opened above");
+        let keep = self.segments.keep(Kind::Events, scope.environment).await?;
+        let segment = SegmentId::new(Kind::Events, received.day(), keep);
+        let mut writers = self.writers.lock().await;
+        let connection = writers.get(&self.segments, segment).await?;
         let message = event.primary().map_or_else(
             || event.message.clone().unwrap_or_default(),
             |e| {
@@ -725,13 +726,13 @@ impl EventStore for SegmentEvents {
         .execute(&mut *connection)
         .await
         .map_err(port)?;
-        drop(writer);
-        self.segments.note_batch(Kind::Events, day, 1, time, time).await
+        drop(writers);
+        self.segments.note_batch(segment, 1, time, time).await
     }
 
     async fn get(&self, event_id: &str) -> Result<Option<StoredEvent>, PortError> {
-        for day in self.days().await? {
-            let Some(pool) = self.segments.reader(Kind::Events, day).await? else { continue };
+        for segment in self.segments().await? {
+            let Some(pool) = self.segments.reader(segment).await? else { continue };
             let row = sqlx::query("SELECT * FROM events WHERE event_id = ? LIMIT 1")
                 .bind(event_id)
                 .fetch_optional(&pool)
@@ -756,8 +757,9 @@ impl EventStore for SegmentEvents {
 
     async fn seen(&self, event_id: &str, since: Timestamp) -> Result<Option<IssueId>, PortError> {
         // Duplicates come soon after: the segments of `since` and the day after.
-        for day in [since.day(), Day::from_days(since.day().days() + 1)] {
-            let Some(pool) = self.segments.reader(Kind::Events, day).await? else { continue };
+        let days = [since.day(), Day::from_days(since.day().days() + 1)];
+        for segment in self.segments.on_days(Kind::Events, &days).await? {
+            let Some(pool) = self.segments.reader(segment).await? else { continue };
             let issue: Option<i64> = sqlx::query_scalar(
                 "SELECT issue_id FROM events WHERE event_id = ? AND received >= ? LIMIT 1",
             )
@@ -780,8 +782,8 @@ impl EventStore for SegmentEvents {
         limit: u32,
     ) -> Result<Vec<EventSummary>, PortError> {
         let mut found: Vec<EventSummary> = Vec::new();
-        for day in self.days().await? {
-            let Some(pool) = self.segments.reader(Kind::Events, day).await? else { continue };
+        for segment in self.segments().await? {
+            let Some(pool) = self.segments.reader(segment).await? else { continue };
             let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
                 "{SUMMARY} WHERE issue_id = ? AND time < ? ORDER BY time DESC LIMIT ?"
             )))
@@ -803,8 +805,8 @@ impl EventStore for SegmentEvents {
 
     async fn by_trace(&self, trace_id: &str) -> Result<Vec<EventSummary>, PortError> {
         let mut found = Vec::new();
-        for day in self.days().await? {
-            let Some(pool) = self.segments.reader(Kind::Events, day).await? else { continue };
+        for segment in self.segments().await? {
+            let Some(pool) = self.segments.reader(segment).await? else { continue };
             let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
                 "{SUMMARY} WHERE trace_id = ? ORDER BY time LIMIT 100"
             )))

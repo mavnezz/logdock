@@ -44,16 +44,20 @@ impl logdock_retention::application::ports::SegmentCatalog for Probe {
         Ok(Vec::new())
     }
 
-    async fn delete(
-        &self,
-        _: logdock_retention::domain::Kind,
-        _: logdock_kernel::Day,
-    ) -> Result<(), PortError> {
+    async fn delete(&self, _: logdock_retention::domain::Segment) -> Result<(), PortError> {
         Ok(())
     }
 
     async fn close_before(&self, _: logdock_kernel::Day) -> Result<u32, PortError> {
         Ok(0)
+    }
+
+    async fn measure(&self) -> Result<u32, PortError> {
+        Ok(0)
+    }
+
+    async fn usage(&self) -> Result<Vec<logdock_retention::domain::ScopeUsage>, PortError> {
+        Ok(Vec::new())
     }
 }
 

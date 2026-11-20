@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use logdock_kernel::{Day, PortError, Timestamp};
 
-use crate::domain::{Kind, Segment};
+use crate::domain::{ScopeUsage, Segment};
 
 /// The state of the data directory and the writers.
 #[async_trait]
@@ -28,11 +28,19 @@ pub trait SegmentCatalog: Send + Sync {
     /// Every segment with its size.
     async fn segments(&self) -> Result<Vec<Segment>, PortError>;
 
-    async fn delete(&self, kind: Kind, day: Day) -> Result<(), PortError>;
+    async fn delete(&self, segment: Segment) -> Result<(), PortError>;
 
     /// Closes the segments of days before `today` that are not closed yet;
     /// returns how many.
     async fn close_before(&self, today: Day) -> Result<u32, PortError>;
+
+    /// Measures what each project's stage takes of the segments that
+    /// changed since they were measured last: today's, and those closed
+    /// since. Returns how many it measured.
+    async fn measure(&self) -> Result<u32, PortError>;
+
+    /// What each project's stage takes, over all segments, as measured.
+    async fn usage(&self) -> Result<Vec<ScopeUsage>, PortError>;
 }
 
 /// What the main database keeps beside the segments.

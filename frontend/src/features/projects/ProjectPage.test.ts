@@ -119,10 +119,26 @@ describe('a project’s page', () => {
   })
 
   it('saves its settings', async () => {
+    const own = { environment_id: 2, logs_days: 3, events_days: null, traces_days: null }
+    const base = project()
     const api = stubApi({
-      'GET /api/v1/projects/3': () => project(),
+      'GET /api/v1/projects/3': () => project({ settings: { ...base.settings, retention: [own] } }),
       'GET /api/v1/projects/3/ingest': () => [],
       'PATCH /api/v1/projects/3': () => project(),
+      'GET /api/v1/system/storage': () => ({
+        kinds: [
+          { kind: 'logs', bytes: 0, segments: 0, retention_days: 30 },
+          { kind: 'events', bytes: 0, segments: 0, retention_days: 90 },
+          { kind: 'traces', bytes: 0, segments: 0, retention_days: 7 },
+        ],
+        segments: [],
+        stages: [],
+        segment_bytes: 0,
+        max_storage_bytes: 0,
+        database_bytes: 0,
+        min_free_bytes: 0,
+        rollups_days: 90,
+      }),
     })
     const { wrapper } = mountWith(ProjectPage, { props: { id: '3' }, attachTo: document.body })
     useSessionStore().set(session())
@@ -138,12 +154,22 @@ describe('a project’s page', () => {
     await wrapper
       .find('#settings-overrides')
       .setValue('POST /payments = 5000\nnonsense\nGET /health = 0')
+    // A stage's own retention, the server's days as the hint.
+    const staging = (kind: string) => wrapper.find(`input[aria-label="staging: ${kind}"]`)
+    expect((staging('Logs').element as HTMLInputElement).value).toBe('3')
+    expect(staging('Errors').attributes('placeholder')).toBe('90 days')
+    await staging('Traces').setValue('1')
+    await wrapper.find('input[aria-label="production: Logs"]').setValue('60')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     const patch = api.calls.find((c) => c.method === 'PATCH')!
     const body = (await patch.json()) as {
-      settings: { notify: string[]; performance: Record<string, unknown> }
+      settings: { notify: string[]; performance: Record<string, unknown>; retention: unknown }
     }
+    expect(body.settings.retention).toEqual([
+      { environment_id: 1, logs_days: 60, events_days: null, traces_days: null },
+      { environment_id: 2, logs_days: 3, events_days: null, traces_days: 1 },
+    ])
     expect(body.settings.notify).toEqual(['ops@example.com', 'lead@example.com'])
     expect(body.settings.performance).toEqual({
       request_ms: null,

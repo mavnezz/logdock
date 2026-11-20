@@ -4,6 +4,7 @@ import { setLocale } from '@/shared/i18n'
 
 import {
   formatBytes,
+  formatDay,
   formatDateTime,
   formatDuration,
   formatNumber,
@@ -26,6 +27,8 @@ describe('formatting', () => {
     expect(formatRelative('2026-11-18T09:59:58Z', now)).toBe('2 seconds ago')
     expect(formatRelative(undefined)).toBe('–')
     expect(formatNumber(12345)).toBe('12,345')
+    expect(formatDay('2026-11-20')).toBe('20 Nov 2026')
+    expect(formatDay('soon')).toBe('soon')
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(1536)).toBe('1.5 KiB')
     expect(formatBytes(50 * 1024 ** 3)).toBe('50 GiB')

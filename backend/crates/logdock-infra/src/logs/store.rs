@@ -13,7 +13,7 @@ use logdock_retention::domain::Kind;
 use sqlx::{QueryBuilder, Row, Sqlite};
 
 use super::entry;
-use crate::segments::{Segments, port};
+use crate::segments::{SegmentId, Segments, port};
 
 /// [`LogStore`] over the logs' day segments.
 #[derive(Debug, Clone)]
@@ -77,12 +77,12 @@ struct Prepared<'a> {
 impl SegmentLogStore {
     async fn search_segment(
         &self,
-        day: logdock_kernel::Day,
+        segment: SegmentId,
         prepared: &Prepared<'_>,
         limit: u32,
     ) -> Result<Vec<LogEntry>, PortError> {
         let Prepared { query, fts, projects, environments, levels } = prepared;
-        let Some(pool) = self.segments.reader(Kind::Logs, day).await? else { return Ok(Vec::new()) };
+        let Some(pool) = self.segments.reader(segment).await? else { return Ok(Vec::new()) };
         let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT l.* FROM logs l");
         if let Some(fts) = fts {
             sql.push(" JOIN logs_fts ON logs_fts.rowid = l.id AND logs_fts MATCH ").push_bind(fts.clone());
@@ -96,14 +96,17 @@ impl SegmentLogStore {
         }
         if let Some(cursor) = query.before {
             let time = cursor.time.unix_micros();
-            if day == cursor.id.day {
+            // At the cursor's time, entries come in the order of their
+            // segments, then of their rows.
+            let (here, there) = ((segment.day, segment.keep), (cursor.id.day, cursor.id.keep));
+            if here == there {
                 sql.push(" AND (l.time < ").push_bind(time);
                 sql.push(" OR (l.time = ")
                     .push_bind(time)
                     .push(" AND l.id < ")
                     .push_bind(cursor.id.row)
                     .push("))");
-            } else if day < cursor.id.day {
+            } else if here < there {
                 sql.push(" AND l.time <= ").push_bind(time);
             } else {
                 sql.push(" AND l.time < ").push_bind(time);
@@ -124,7 +127,7 @@ impl SegmentLogStore {
         }
         sql.push(" ORDER BY l.time DESC, l.id DESC LIMIT ").push_bind(i64::from(limit));
         let rows = sql.build().fetch_all(&pool).await.map_err(port)?;
-        Ok(rows.iter().map(|row| entry(day, row)).collect())
+        Ok(rows.iter().map(|row| entry(segment, row)).collect())
     }
 }
 
@@ -157,7 +160,7 @@ impl LogStore for SegmentLogStore {
             {
                 break;
             }
-            let rows = self.search_segment(segment.day, &prepared, limit + 1).await?;
+            let rows = self.search_segment(segment.id(), &prepared, limit + 1).await?;
             found.extend(rows);
             found.sort_by_key(|e| std::cmp::Reverse(order_key(e)));
             found.truncate(limit as usize + 1);
@@ -170,19 +173,20 @@ impl LogStore for SegmentLogStore {
     }
 
     async fn get(&self, id: LogId) -> Result<Option<LogEntry>, PortError> {
-        let Some(pool) = self.segments.reader(Kind::Logs, id.day).await? else { return Ok(None) };
+        let segment = SegmentId::new(Kind::Logs, id.day, id.keep);
+        let Some(pool) = self.segments.reader(segment).await? else { return Ok(None) };
         let row = sqlx::query("SELECT * FROM logs WHERE id = ?")
             .bind(id.row)
             .fetch_optional(&pool)
             .await
             .map_err(port)?;
-        Ok(row.map(|row| entry(id.day, &row)))
+        Ok(row.map(|row| entry(segment, &row)))
     }
 }
 
-fn order_key(entry: &LogEntry) -> (Timestamp, i64, i64) {
-    let id = entry.id.unwrap_or(LogId { day: logdock_kernel::Day::from_days(0), row: 0 });
-    (entry.time, id.day.days(), id.row)
+fn order_key(entry: &LogEntry) -> (Timestamp, i64, u32, i64) {
+    let id = entry.id.unwrap_or(LogId { day: logdock_kernel::Day::from_days(0), keep: 0, row: 0 });
+    (entry.time, id.day.days(), id.keep, id.row)
 }
 
 /// [`LogStats`] on the main database's rollups.

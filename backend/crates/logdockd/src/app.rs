@@ -205,6 +205,15 @@ impl App {
                 },
                 _ = backfill_stopped.changed() => {}
             }
+            // What each stage takes, without waiting an hour for the
+            // retention's first run.
+            let measure = logdock_retention::application::ports::SegmentCatalog::measure(&*backfill_segments);
+            tokio::select! {
+                result = measure => if let Err(error) = result {
+                    tracing::warn!(error = %chain(&error), "cannot measure what each stage takes");
+                },
+                _ = backfill_stopped.changed() => {}
+            }
         }));
         let flush = counter.clone();
         tasks.push(every(Duration::from_secs(10), stopped.clone(), move || {
@@ -259,6 +268,7 @@ impl App {
                     Ok(report) if !report.deleted.is_empty() || report.closed > 0 => tracing::info!(
                         deleted = report.deleted.len(),
                         closed = report.closed,
+                        measured = report.measured,
                         pruned_rollups = report.pruned_rollups,
                         "retention applied"
                     ),
@@ -286,6 +296,12 @@ impl App {
 
     /// Finishes what is under way, within `timeout`, and closes the
     /// database.
+    /// Measures what each project's stage takes of the data, as the hourly
+    /// retention does; returns how many segments it measured.
+    pub async fn measure_storage(&self) -> anyhow::Result<u32> {
+        Ok(logdock_retention::application::ports::SegmentCatalog::measure(&*self.segments).await?)
+    }
+
     pub async fn shutdown(self, timeout: Duration) {
         let _ = self.stop.send(true);
         let finish = async {

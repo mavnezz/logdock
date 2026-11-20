@@ -27,7 +27,7 @@ impl LogSink for MemoryLogs {
     async fn submit(&self, entries: Vec<LogEntry>, _wait: bool) -> Result<Submitted, PortError> {
         let mut stored = self.entries.lock().unwrap();
         for mut entry in entries {
-            entry.id = Some(LogId { day: entry.received.day(), row: stored.len() as i64 + 1 });
+            entry.id = Some(LogId { day: entry.received.day(), keep: 0, row: stored.len() as i64 + 1 });
             let _ = self.feed.send(Arc::new(entry.clone()));
             stored.push(entry);
         }

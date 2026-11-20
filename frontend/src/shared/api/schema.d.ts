@@ -688,7 +688,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** How much each kind of data takes, and the limits. */
+        /**
+         * How much each kind of data takes, per day, project and stage, where it
+         *     is heading, and the limits.
+         */
         get: operations["storage"];
         put?: never;
         post?: never;
@@ -1405,6 +1408,21 @@ export interface components {
         ResetPasswordRequest: {
             password: string;
         };
+        /**
+         * @description A stage that keeps its data for days of its own; a kind left out (or
+         *     `null`) is kept as long as the server's setting says. Applies to data
+         *     received from then on.
+         */
+        Retention: {
+            /** Format: int64 */
+            environment_id: number;
+            /** Format: int32 */
+            events_days?: number | null;
+            /** Format: int32 */
+            logs_days?: number | null;
+            /** Format: int32 */
+            traces_days?: number | null;
+        };
         Sample: {
             /** Format: double */
             duration_ms: number;
@@ -1425,6 +1443,21 @@ export interface components {
         };
         /** @enum {string} */
         Scope: "read" | "triage";
+        /** @description One segment: a kind's data of one day of receipt. */
+        SegmentUsage: {
+            /** Format: int64 */
+            bytes: number;
+            /** @description `YYYY-MM-DD`. */
+            day: string;
+            kind: string;
+            /** @description Whether its stages keep their data for days of their own. */
+            own_retention: boolean;
+            /**
+             * Format: int32
+             * @description Days it is kept: its stages' own retention, or the kind's.
+             */
+            retention_days: number;
+        };
         SeriesBucket: components["schemas"]["Stats"] & {
             start: string;
         };
@@ -1453,6 +1486,8 @@ export interface components {
             notify_regressions: boolean;
             performance?: components["schemas"]["Performance"];
             redaction: components["schemas"]["Redaction"];
+            /** @description Stages that keep their data for 1 to 3650 days of their own. */
+            retention?: components["schemas"]["Retention"][];
         };
         SetupRequest: {
             /** @description The code Logdock wrote to its log at the start. */
@@ -1483,6 +1518,22 @@ export interface components {
             post_context: string[];
             pre_context: string[];
         };
+        /** @description What one project's stage takes of one kind, over the days kept. */
+        StageUsage: {
+            /**
+             * Format: int64
+             * @description Its share of the segments, by the size of its rows; measured every
+             *     hour.
+             */
+            bytes: number;
+            /** Format: int64 */
+            environment_id: number;
+            kind: string;
+            /** Format: int64 */
+            project_id: number;
+            /** Format: int64 */
+            rows: number;
+        };
         /** @description What a range of one name adds up to. */
         Stats: {
             /** Format: double */
@@ -1512,6 +1563,7 @@ export interface components {
         Storage: {
             /** Format: int64 */
             database_bytes: number;
+            forecast?: components["schemas"]["StorageForecast"] | null;
             /** Format: int64 */
             free_bytes?: number | null;
             kinds: components["schemas"]["KindUsage"][];
@@ -1529,6 +1581,37 @@ export interface components {
             rollups_days: number;
             /** Format: int64 */
             segment_bytes: number;
+            /** @description Every segment, oldest day first. */
+            segments: components["schemas"]["SegmentUsage"][];
+            /** @description Per project and stage, the largest first. */
+            stages: components["schemas"]["StageUsage"][];
+        };
+        /** @description Where the data is heading at the rate of the last full days. */
+        StorageForecast: {
+            /** Format: int64 */
+            daily_bytes: number;
+            /**
+             * Format: int32
+             * @description The full days the rate is taken from, at most 7.
+             */
+            days: number;
+            /**
+             * Format: int32
+             * @description Days until the disk is down to its reserve, if it will be.
+             */
+            disk_in_days?: number | null;
+            /**
+             * Format: int32
+             * @description Days until the storage limit, if it will be reached; from then the
+             *     oldest days go before their time.
+             */
+            limit_in_days?: number | null;
+            /**
+             * Format: int64
+             * @description What is kept once each kind and stage keeps as many days as its
+             *     retention says.
+             */
+            settled_bytes: number;
         };
         StoredEventDto: {
             /** Format: int64 */

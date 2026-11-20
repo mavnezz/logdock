@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
+use logdock_kernel::retention::StageRetention;
 use logdock_kernel::{EnvironmentId, PortError, ProjectId, Timestamp};
 use logdock_projects::application::ports::ProjectRepository;
 use logdock_projects::domain::{
@@ -45,6 +46,36 @@ struct SettingsJson {
     perf_overrides: Vec<(String, u32)>,
     perf_n_plus_one: bool,
     perf_slow_query_ms: Option<u32>,
+    retention: Vec<RetentionJson>,
+}
+
+/// A stage's own retention, as stored.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+struct RetentionJson {
+    environment: i64,
+    logs_days: Option<u32>,
+    events_days: Option<u32>,
+    traces_days: Option<u32>,
+}
+
+impl RetentionJson {
+    fn stage(&self) -> (i64, StageRetention) {
+        let retention = StageRetention {
+            logs_days: self.logs_days,
+            events_days: self.events_days,
+            traces_days: self.traces_days,
+        };
+        (self.environment, retention)
+    }
+}
+
+/// The stages' own retention in a project's stored settings, for the
+/// segments.
+pub(crate) fn stage_retention(json: &str) -> Vec<(i64, StageRetention)> {
+    serde_json::from_str::<SettingsJson>(json)
+        .map(|s| s.retention.iter().map(RetentionJson::stage).collect())
+        .unwrap_or_default()
 }
 
 impl Default for SettingsJson {
@@ -69,6 +100,16 @@ impl From<&ProjectSettings> for SettingsJson {
             perf_overrides: settings.performance.overrides.clone(),
             perf_n_plus_one: settings.performance.n_plus_one,
             perf_slow_query_ms: settings.performance.slow_query_ms,
+            retention: settings
+                .retention
+                .iter()
+                .map(|(stage, r)| RetentionJson {
+                    environment: stage.get(),
+                    logs_days: r.logs_days,
+                    events_days: r.events_days,
+                    traces_days: r.traces_days,
+                })
+                .collect(),
         }
     }
 }
@@ -93,6 +134,14 @@ impl SettingsJson {
                 n_plus_one: self.perf_n_plus_one,
                 slow_query_ms: self.perf_slow_query_ms,
             },
+            retention: self
+                .retention
+                .iter()
+                .map(|r| {
+                    let (stage, retention) = r.stage();
+                    (EnvironmentId::new(stage), retention)
+                })
+                .collect(),
         }
     }
 }

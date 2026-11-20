@@ -125,6 +125,7 @@ and are checked against the benchmark in 5.6.
 ├── logdock.db              accounts, sessions, projects, keys, issues, rollups, segment catalog
 └── segments/
     ├── logs/2026-11-18.db
+    ├── logs/2026-11-18.3d.db   stages that keep their logs 3 days (5.4)
     ├── events/2026-11-18.db
     └── traces/…            (R2)
 ```
@@ -417,6 +418,16 @@ value in the attributes column, then checks the key with `json_extract`. The opt
 
 - **Retention.** A segment is deleted when its day falls out of retention. Deleting the file is instant and gives the
   space back. A `DELETE` would leave the pages on SQLite's freelist and would update FTS for every row.
+- **Per stage.** A stage may keep a kind for days of its own (1 to 3650, in the project's settings). Its data goes into
+  segments of that retention, `<day>.<days>d.db`, which stages with the same days share; they are deleted when those
+  days are over, so a stage's data goes without a `DELETE` and closed segments still never change. Writers read the
+  stages' retention every 30 seconds; a changed setting applies to data received from then on. A log entry's ID
+  names its segment: `<day>-<row>`, or `<day>.<days>-<row>`.
+- **Usage.** Every hour, and after the start, each project's stage is measured in the segments changed since (today's
+  and those closed since): its rows, and its share of each file by the size of its rows (`segment_usage` in
+  `logdock.db`). The storage page shows it per day, kind and stage, with a forecast from the last full days (up to 7):
+  what a day adds, what the data settles at once every kind is kept as long as its retention says, and in how many
+  days the storage limit or the disk's reserve would be reached.
 - **Storage limit.** Above `LOGDOCK_MAX_STORAGE` the oldest segments go first, and the interface shows a notice.
 - **Free disk.** Below `LOGDOCK_MIN_FREE_DISK` the ingest endpoints answer `503` and readiness fails.
 - **Issues** stay after their events have expired (4.2).

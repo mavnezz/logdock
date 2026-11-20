@@ -18,11 +18,11 @@ use logdock_performance::domain::{BUCKETS, Kind, Measurement, Rollup, Span, Tran
 use logdock_retention::domain::Kind as SegmentKind;
 use serde_json::{Value as Json, json};
 use sqlx::sqlite::SqliteRow;
-use sqlx::{Connection, QueryBuilder, Row, Sqlite, SqliteConnection};
+use sqlx::{QueryBuilder, Row, Sqlite};
 use tokio::sync::Mutex;
 
 use crate::json::{from_json, packed_json, to_json, unpacked_json};
-use crate::segments::Segments;
+use crate::segments::{SegmentId, Segments, Writers};
 use crate::sqlite::Database;
 
 fn port(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> PortError {
@@ -199,18 +199,17 @@ impl RollupStore for SqliteRollups {
 #[derive(Debug)]
 pub struct SegmentTransactions {
     segments: Arc<Segments>,
-    writer: Mutex<Option<(logdock_kernel::Day, SqliteConnection)>>,
+    /// Today's segments and the connections to them.
+    writers: Mutex<Writers>,
 }
 
 impl SegmentTransactions {
     pub fn new(segments: Arc<Segments>) -> Self {
-        Self { segments, writer: Mutex::new(None) }
+        Self { segments, writers: Mutex::new(Writers::new(SegmentKind::Traces, false)) }
     }
 
     pub async fn close(&self) {
-        if let Some((_, connection)) = self.writer.lock().await.take() {
-            let _ = connection.close().await;
-        }
+        self.writers.lock().await.close().await;
     }
 }
 
@@ -326,15 +325,10 @@ const SUMMARY: &str = "SELECT trace_id, span_id, kind, name, status, http_status
 #[async_trait]
 impl TransactionStore for SegmentTransactions {
     async fn insert(&self, scope: Scope, t: &Transaction, received: Timestamp) -> Result<(), PortError> {
-        let day = received.day();
-        let mut writer = self.writer.lock().await;
-        if writer.as_ref().is_none_or(|(current, _)| *current != day) {
-            if let Some((_, old)) = writer.take() {
-                let _ = old.close().await;
-            }
-            *writer = Some((day, self.segments.open_writer(SegmentKind::Traces, day).await?));
-        }
-        let (_, connection) = writer.as_mut().expect("opened above");
+        let keep = self.segments.keep(SegmentKind::Traces, scope.environment).await?;
+        let segment = SegmentId::new(SegmentKind::Traces, received.day(), keep);
+        let mut writers = self.writers.lock().await;
+        let connection = writers.get(&self.segments, segment).await?;
         sqlx::query(concat!(
             "INSERT INTO transactions (trace_id, span_id, kind, name, status, http_status, failed, start, ",
             "duration_us, received, project_id, environment_id, release, service, host, span_count, data) ",
@@ -360,8 +354,8 @@ impl TransactionStore for SegmentTransactions {
         .execute(&mut *connection)
         .await
         .map_err(port)?;
-        drop(writer);
-        self.segments.note_batch(SegmentKind::Traces, day, 1, t.start, t.start).await
+        drop(writers);
+        self.segments.note_batch(segment, 1, t.start, t.start).await
     }
 
     async fn samples(&self, query: &SampleQuery) -> Result<Vec<TransactionSummary>, PortError> {
@@ -369,7 +363,7 @@ impl TransactionStore for SegmentTransactions {
         for segment in
             self.segments.overlapping(SegmentKind::Traces, Some(query.from), Some(query.to)).await?
         {
-            let Some(pool) = self.segments.reader(SegmentKind::Traces, segment.day).await? else { continue };
+            let Some(pool) = self.segments.reader(segment.id()).await? else { continue };
             let mut sql: QueryBuilder<Sqlite> = QueryBuilder::new(SUMMARY);
             sql.push(" WHERE kind = ").push_bind(query.kind.as_str());
             sql.push(" AND name = ").push_bind(query.name.clone());
@@ -404,7 +398,7 @@ impl TransactionStore for SegmentTransactions {
     async fn by_trace(&self, trace_id: &str) -> Result<Vec<StoredTransaction>, PortError> {
         let mut found = Vec::new();
         for segment in self.segments.overlapping(SegmentKind::Traces, None, None).await? {
-            let Some(pool) = self.segments.reader(SegmentKind::Traces, segment.day).await? else { continue };
+            let Some(pool) = self.segments.reader(segment.id()).await? else { continue };
             let rows =
                 sqlx::query("SELECT project_id, environment_id, data FROM transactions WHERE trace_id = ?")
                     .bind(trace_id)

@@ -14,6 +14,8 @@ sends to Logdock, and one web interface searches across all of them.
   slow queries and requests over their threshold become issues.
 - **Other logs:** Nginx's and other containers' output through Vector or Fluent Bit, and a buffered mode for Laravel's
   logs.
+- **Storage:** what each day, kind and stage takes and where it is heading; each stage can keep its data for days of
+  its own.
 - **For Claude and scripts:** API tokens that read (and, if wanted, triage issues), and an MCP server at `/mcp`.
 
 The apps keep using the Sentry SDK they already have; only the DSN points to Logdock.

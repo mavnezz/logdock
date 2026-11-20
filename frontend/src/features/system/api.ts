@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/vue-query'
 
-import { api, ApiProblem } from '@/shared/api/client'
+import { api, ApiProblem, unwrap } from '@/shared/api/client'
 import type { components } from '@/shared/api/schema'
 
 export type Health = components['schemas']['Health']
@@ -17,5 +17,15 @@ export function useReadiness() {
       throw new ApiProblem(response.status, 'unknown')
     },
     refetchInterval: 30_000,
+  })
+}
+
+export type Storage = components['schemas']['Storage']
+
+/** What the data takes, per day, kind and stage, and where it is heading. */
+export function useStorage() {
+  return useQuery({
+    queryKey: ['system', 'storage'],
+    queryFn: () => unwrap(api.GET('/api/v1/system/storage')),
   })
 }

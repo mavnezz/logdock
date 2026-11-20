@@ -22,5 +22,7 @@ export function useProjectNames() {
   return {
     project: (id: number) => names.value.projectNames.get(id) ?? `#${id}`,
     environment: (id: number) => names.value.environmentNames.get(id) ?? `#${id}`,
+    /** A project's settings, once loaded. */
+    settings: (id: number) => projects.data.value?.find((p) => p.id === id)?.settings,
   }
 }

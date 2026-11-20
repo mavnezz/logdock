@@ -18,6 +18,7 @@ export const navigation: NavItem[] = [
   { name: 'releases', path: '/releases', icon: 'releases' },
   { name: 'monitors', path: '/monitors', icon: 'monitors' },
   { name: 'projects', path: '/projects', icon: 'projects', section: 'setup' },
+  { name: 'storage', path: '/storage', icon: 'storage' },
   { name: 'accounts', path: '/accounts', icon: 'accounts', admin: true },
   { name: 'audit', path: '/audit', icon: 'audit', admin: true },
   { name: 'profile', path: '/profile', icon: 'profile' },

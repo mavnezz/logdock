@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use logdock_kernel::{Actor, ProjectId, RequestContext};
+use logdock_kernel::{Actor, EnvironmentId, ProjectId, RequestContext};
 
 use crate::application::{MAX_STAGES, ProjectChanges, ProjectError, StageFor};
 use crate::domain::{NotifyAddress, ProjectSettings, Rejection, Tally};
@@ -181,8 +181,12 @@ async fn a_project_gets_a_limited_number_of_stages_from_its_data() {
 #[tokio::test]
 async fn renames_changes_settings_and_deletes() {
     let t = TestProjects::new();
-    let project =
-        t.use_cases.create.execute(&actor(), "orders", &["production".into()], &request()).await.unwrap();
+    let project = t
+        .use_cases
+        .create
+        .execute(&actor(), "orders", &["production".into(), "dev".into()], &request())
+        .await
+        .unwrap();
     t.use_cases.create.execute(&actor(), "billing", &[], &request()).await.unwrap();
     let key = t
         .use_cases
@@ -198,9 +202,19 @@ async fn renames_changes_settings_and_deletes() {
     let mut settings = ProjectSettings::default();
     settings.notify.push(NotifyAddress::parse("ops@example.com").unwrap());
     settings.redaction.extra_keys.push("customer_pin".into());
+    let short = logdock_kernel::retention::StageRetention { logs_days: Some(3), ..Default::default() };
+    let stage = project.environments[0].id;
+    // Another project's stage and a stage as the server keeps it are left out.
+    settings.retention = vec![
+        (stage, short),
+        (EnvironmentId::new(999), short),
+        (project.environments[1].id, Default::default()),
+    ];
     let changes = ProjectChanges { name: Some("orders-api".into()), settings: Some(settings.clone()) };
     let changed = t.use_cases.update.execute(&actor(), project.id, changes, &request()).await.unwrap();
     assert_eq!(changed.name.as_str(), "orders-api");
+    assert_eq!(changed.settings.retention, [(stage, short)]);
+    settings.retention = vec![(stage, short)];
     let scope = t.use_cases.authenticate_key.execute(None, key.secret.expose()).await.unwrap().unwrap();
     assert_eq!(scope.settings, settings, "the key's scope carries the new settings at once");
 

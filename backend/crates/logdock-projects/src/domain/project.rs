@@ -2,6 +2,7 @@ use std::fmt;
 
 use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
+use logdock_kernel::retention::StageRetention;
 use logdock_kernel::{EnvironmentId, ProjectId, Timestamp};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -18,6 +19,8 @@ pub enum InvalidProject {
     TooManyAddresses { max: usize },
     #[error("a redaction key must have 1 to 64 characters")]
     RedactionKey,
+    #[error("a stage keeps its data for 1 to 3650 days, once per stage")]
+    Retention,
 }
 
 /// A project's name, such as `orders-backend`.
@@ -122,6 +125,8 @@ pub struct ProjectSettings {
     pub redaction: RedactionRules,
     /// When requests, jobs and queries become performance issues.
     pub performance: PerformanceRules,
+    /// Stages that keep their data for a number of days of their own.
+    pub retention: Vec<(EnvironmentId, StageRetention)>,
 }
 
 impl Default for ProjectSettings {
@@ -133,6 +138,7 @@ impl Default for ProjectSettings {
             notify_monitors: true,
             redaction: RedactionRules::default(),
             performance: PerformanceRules::default(),
+            retention: Vec::new(),
         }
     }
 }
@@ -147,6 +153,12 @@ impl ProjectSettings {
         let keys = self.redaction.extra_keys.iter().chain(self.redaction.allowed_keys.iter().flatten());
         if keys.into_iter().any(|key| key.trim().is_empty() || key.chars().count() > 64) {
             return Err(InvalidProject::RedactionKey);
+        }
+        let stages = &self.retention;
+        let twice =
+            stages.iter().enumerate().any(|(i, (id, _))| stages[..i].iter().any(|(other, _)| other == id));
+        if twice || stages.iter().any(|(_, retention)| !retention.is_valid()) {
+            return Err(InvalidProject::Retention);
         }
         Ok(())
     }
@@ -198,6 +210,14 @@ mod tests {
         settings.redaction.extra_keys = vec!["  ".into()];
         assert_eq!(settings.validate(), Err(InvalidProject::RedactionKey));
         settings.redaction.extra_keys.clear();
+        let dev = (EnvironmentId::new(2), StageRetention { logs_days: Some(3), ..Default::default() });
+        settings.retention = vec![dev];
+        assert!(settings.validate().is_ok());
+        settings.retention = vec![dev, dev];
+        assert_eq!(settings.validate(), Err(InvalidProject::Retention), "once per stage");
+        settings.retention = vec![(dev.0, StageRetention { traces_days: Some(0), ..Default::default() })];
+        assert_eq!(settings.validate(), Err(InvalidProject::Retention));
+        settings.retention.clear();
         settings.notify = vec![NotifyAddress::parse("a@b.de").unwrap(); 51];
         assert!(matches!(settings.validate(), Err(InvalidProject::TooManyAddresses { .. })));
     }

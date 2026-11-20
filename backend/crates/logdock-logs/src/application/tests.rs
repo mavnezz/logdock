@@ -145,7 +145,7 @@ async fn search_turns_typed_filters_into_filters_and_bounds_the_page() {
     assert_eq!(seen.trace_id.as_deref(), Some("abc"));
     assert_eq!(seen.text.terms.len(), 1);
     assert_eq!(seen.limit, LogQuery::MAX_LIMIT);
-    assert!(logs.get.execute(LogId { day: Day::from_days(1), row: 1 }).await.unwrap().is_none());
+    assert!(logs.get.execute(LogId { day: Day::from_days(1), keep: 0, row: 1 }).await.unwrap().is_none());
     assert!(logs.sources.execute(&[]).await.unwrap().is_empty());
 }
 

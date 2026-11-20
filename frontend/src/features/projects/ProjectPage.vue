@@ -2,7 +2,7 @@
 import { Plus, Trash2 } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { useSessionStore } from '@/shared/session/store'
 import { problemMessage } from '@/shared/i18n'
@@ -28,7 +28,11 @@ const addEnvironment = useAddEnvironment(projectId)
 const removeEnvironment = useRemoveEnvironment(projectId)
 const deleteProject = useDeleteProject()
 
-const tab = ref<'overview' | 'keys' | 'settings'>('overview')
+const route = useRoute()
+// The storage page links to a project's settings.
+const tab = ref<'overview' | 'keys' | 'settings'>(
+  route.query.tab === 'settings' && store.isAdmin ? 'settings' : 'overview',
+)
 const newEnvironment = ref('')
 const deleting = ref(false)
 

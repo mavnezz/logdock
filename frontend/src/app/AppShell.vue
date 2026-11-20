@@ -4,6 +4,7 @@ import {
   Bug,
   CalendarClock,
   FolderKanban,
+  HardDrive,
   Layers,
   LayoutDashboard,
   LogOut,
@@ -34,6 +35,7 @@ const open = ref(false)
 
 const icons: Record<string, LucideIcon> = {
   projects: FolderKanban,
+  storage: HardDrive,
   accounts: Users,
   audit: ShieldCheck,
   profile: UserRound,
