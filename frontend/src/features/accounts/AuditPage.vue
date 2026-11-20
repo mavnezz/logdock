@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime } from '@/shared/lib/format'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
+import { Button } from '@/shared/ui/button'
 import { PageHeader } from '@/shared/ui/page'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/ui/table'
 
@@ -12,6 +14,7 @@ import { useAudit } from './api'
 
 const { t } = useI18n()
 const audit = useAudit()
+const entries = computed(() => audit.data.value?.pages.flat() ?? [])
 const variant = (outcome: string) =>
   outcome === 'success' ? 'success' : outcome === 'denied' ? 'destructive' : 'warning'
 </script>
@@ -33,7 +36,7 @@ const variant = (outcome: string) =>
         </TableRow>
       </TableHeader>
       <TableBody>
-        <TableRow v-for="entry in audit.data.value" :key="entry.id">
+        <TableRow v-for="entry in entries" :key="entry.id">
           <TableCell class="whitespace-nowrap text-muted-foreground">{{
             formatDateTime(entry.at)
           }}</TableCell>
@@ -56,5 +59,14 @@ const variant = (outcome: string) =>
         </TableRow>
       </TableBody>
     </Table>
+    <div v-if="audit.hasNextPage.value" class="flex justify-center">
+      <Button
+        variant="outline"
+        size="sm"
+        :disabled="audit.isFetchingNextPage.value"
+        @click="audit.fetchNextPage()"
+        >{{ t('common.older') }}</Button
+      >
+    </div>
   </div>
 </template>

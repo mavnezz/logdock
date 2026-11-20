@@ -16,6 +16,11 @@ const de: Messages = {
     add: 'Hinzufügen',
     yes: 'Ja',
     no: 'Nein',
+    pages: 'Seiten',
+    previous: 'Zurück',
+    next: 'Weiter',
+    page: 'Seite {page}',
+    older: 'Ältere',
   },
   nav: {
     menu: 'Menü',

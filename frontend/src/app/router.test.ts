@@ -62,4 +62,30 @@ describe('the navigation guard', () => {
     await r.push('/login')
     expect(r.currentRoute.value.fullPath).toBe('/logs')
   })
+
+  it('brings a list back with the filters it was left with', async () => {
+    localStorage.clear()
+    stubApi({ 'GET /api/v1/auth/session': () => session('member') })
+    const r = router()
+    await r.push('/issues?status=all&sort=count&page=3')
+    await r.push('/issues/5')
+    // From the menu or a back link: no filters given.
+    await r.push('/issues')
+    expect(r.currentRoute.value.fullPath).toBe('/issues?status=all&sort=count')
+
+    // A link into the logs is not a choice to keep.
+    await r.push('/logs?level=error&trace=abc')
+    await r.push('/projects')
+    await r.push('/logs')
+    expect(r.currentRoute.value.query).toEqual({ level: 'error' })
+
+    // Back to the defaults on the list itself: they stay, and are kept.
+    await r.push('/issues?status=all')
+    await r.replace('/issues')
+    expect(r.currentRoute.value.query).toEqual({})
+    await r.push('/projects')
+    await r.push('/issues')
+    expect(r.currentRoute.value.query).toEqual({})
+    localStorage.clear()
+  })
 })

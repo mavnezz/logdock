@@ -47,6 +47,44 @@ describe('the issues page', () => {
     expect(last.searchParams.get('q')).toBe('payment')
   })
 
+  it('pages through issues, and starts over when a filter changes', async () => {
+    const api = stubApi({
+      'GET /api/v1/issues': (request) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'))
+        // 51 on the first page: another follows; 3 on the second.
+        const count = offset === 0 ? 51 : 3
+        return Array.from({ length: count }, (_, n) =>
+          listed({ id: offset + n + 1, title: `Issue ${offset + n + 1}` }),
+        )
+      },
+      'GET /api/v1/projects': () => [project()],
+    })
+    const { wrapper, router } = mountWith(IssuesPage, { path: '/issues' })
+    await flushPromises()
+    expect(wrapper.findAll('li')).toHaveLength(50)
+    const next = wrapper.findAll('button').find((b) => b.text().includes('Next'))!
+    await next.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query.page).toBe('2')
+    const second = new URL(api.calls.at(-1)!.url)
+    expect([second.searchParams.get('offset'), second.searchParams.get('limit')]).toEqual([
+      '50',
+      '51',
+    ])
+    expect(wrapper.text()).toContain('Issue 51')
+    expect(wrapper.text()).toContain('Page 2')
+    expect(
+      wrapper
+        .findAll('button')
+        .find((b) => b.text().includes('Next'))!
+        .attributes('disabled'),
+    ).toBeDefined()
+
+    await wrapper.find('select[aria-label="Status"]').setValue('all')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ status: 'all' })
+  })
+
   it('says when nothing is open', async () => {
     stubApi({ 'GET /api/v1/issues': () => [], 'GET /api/v1/projects': () => [] })
     const { wrapper } = mountWith(IssuesPage, { path: '/issues' })

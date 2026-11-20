@@ -15,6 +15,11 @@ const en = {
     add: 'Add',
     yes: 'Yes',
     no: 'No',
+    pages: 'Pages',
+    previous: 'Previous',
+    next: 'Next',
+    page: 'Page {page}',
+    older: 'Older',
   },
   nav: {
     menu: 'Menu',

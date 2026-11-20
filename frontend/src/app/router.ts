@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from
 
 import { useSessionStore } from '@/shared/session/store'
 import { api, unwrap } from '@/shared/api/client'
+import { remember, remembered } from '@/shared/lib/remembered'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -77,7 +78,7 @@ export const routes: RouteRecordRaw[] = [
 
 /** Sends visitors without a session to the setup or the sign-in. */
 export function installGuard(router: Router, pinia: Pinia): void {
-  router.beforeEach(async (to) => {
+  router.beforeEach(async (to, from) => {
     const store = useSessionStore(pinia)
     const session = await store.load().catch(() => null)
     if (to.meta.public) {
@@ -89,8 +90,15 @@ export function installGuard(router: Router, pinia: Pinia): void {
       return { name: 'login', query: to.fullPath === '/' ? {} : { next: to.fullPath } }
     }
     if (to.meta.admin && session.account.role !== 'admin') return '/'
+    // A list opened from elsewhere without filters gets those it was left
+    // with; on the list itself, no filters means its defaults.
+    if (Object.keys(to.query).length === 0 && from.path !== to.path) {
+      const query = remembered(to.path)
+      if (query) return { path: to.path, query, hash: to.hash, replace: true }
+    }
     return true
   })
+  router.afterEach((to) => remember(to.path, to.query))
 }
 
 export function createAppRouter(pinia: Pinia): Router {

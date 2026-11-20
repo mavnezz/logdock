@@ -38,6 +38,7 @@ const names = useProjectNames()
 const id = computed(() => Number(props.id))
 const detail = useIssue(id)
 const events = useIssueEvents(id)
+const eventItems = computed(() => events.data.value?.pages.flat() ?? [])
 const change = useChangeIssue(id)
 const remove = useDeleteIssue(id)
 const issue = computed(() => detail.data.value?.issue)
@@ -256,7 +257,7 @@ const statusText = computed(() => {
           <section class="grid gap-2">
             <h2 class="text-sm font-medium">{{ t('issues.recentEvents') }}</h2>
             <ol class="divide-y rounded-md border text-xs">
-              <li v-for="item in events.data.value ?? []" :key="item.event_id">
+              <li v-for="item in eventItems" :key="item.event_id">
                 <button
                   type="button"
                   class="grid w-full gap-0.5 px-3 py-1.5 text-left hover:bg-accent"
@@ -272,7 +273,18 @@ const statusText = computed(() => {
                 </button>
               </li>
             </ol>
-            <p v-if="events.data.value?.length === 0" class="text-xs text-muted-foreground">
+            <Button
+              v-if="events.hasNextPage.value"
+              variant="ghost"
+              size="sm"
+              :disabled="events.isFetchingNextPage.value"
+              @click="events.fetchNextPage()"
+              >{{ t('common.older') }}</Button
+            >
+            <p
+              v-if="events.data.value && eventItems.length === 0"
+              class="text-xs text-muted-foreground"
+            >
               {{ t('issues.eventsGone') }}
             </p>
           </section>

@@ -13,6 +13,7 @@ import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { Pager } from '@/shared/ui/pager'
 
 import {
   KINDS,
@@ -47,19 +48,26 @@ const range = computed(() => pick<PerfRange>(one(route.query, 'range'), RANGES, 
 const sort = computed(() => pick<PerfSort>(one(route.query, 'sort'), SORTS, 'total_time'))
 const selected = computed(() => one(route.query, 'name') || null)
 
+const PAGE_SIZE = 50
+const page = computed(() => Math.max(1, Number.parseInt(one(route.query, 'page'), 10) || 1))
+
 function update(changes: Record<string, string | undefined>): void {
   const query: Record<string, string> = {}
+  // Choosing a row or a page keeps the page; another filter starts over.
+  const keepsPage = Object.keys(changes).every((key) => key === 'name' || key === 'page')
   const next = {
     kind: kind.value,
     range: range.value,
     sort: sort.value,
     name: selected.value ?? undefined,
+    page: keepsPage ? String(page.value) : '1',
     ...changes,
   }
   if (next.kind !== 'request') query.kind = next.kind
   if (next.range !== '24h') query.range = next.range
   if (next.sort !== 'total_time') query.sort = next.sort
   if (next.name) query.name = next.name
+  if (next.page && next.page !== '1') query.page = next.page
   void router.replace({ query })
 }
 
@@ -83,6 +91,9 @@ const series = useSeries(params, selected)
 const transactions = computed(() => ['request', 'job', 'command'].includes(kind.value))
 const samples = useSamples(params, selected, transactions)
 const row = computed(() => overview.data.value?.find((r) => r.name === selected.value))
+const shown = computed(() =>
+  (overview.data.value ?? []).slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE),
+)
 
 /** Failures for most kinds, misses for the cache. */
 const flaggedLabel = computed(() =>
@@ -182,7 +193,7 @@ const p95Points = computed(() =>
           </thead>
           <tbody class="divide-y">
             <tr
-              v-for="item in overview.data.value"
+              v-for="item in shown"
               :key="item.name"
               class="cursor-pointer hover:bg-accent/50"
               :class="selected === item.name && 'bg-accent'"
@@ -210,6 +221,11 @@ const p95Points = computed(() =>
           </tbody>
         </table>
       </div>
+      <Pager
+        :page="page"
+        :has-next="(overview.data.value?.length ?? 0) > page * PAGE_SIZE"
+        @update:page="(next) => update({ page: String(next) })"
+      />
     </div>
 
     <aside

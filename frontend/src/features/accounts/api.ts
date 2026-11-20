@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 
 import { api, unwrap } from '@/shared/api/client'
 import type { AccountRole } from '@/shared/api/types'
@@ -7,10 +7,21 @@ export function useAccounts() {
   return useQuery({ queryKey: ['accounts'], queryFn: () => unwrap(api.GET('/api/v1/accounts')) })
 }
 
+const AUDIT_PAGE = 100
+
+/** The audit log, newest first, a page at a time. */
 export function useAudit() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['audit'],
-    queryFn: () => unwrap(api.GET('/api/v1/audit', { params: { query: { limit: 200 } } })),
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET('/api/v1/audit', {
+          params: { query: { limit: AUDIT_PAGE, before: pageParam ?? undefined } },
+        }),
+      ),
+    initialPageParam: null as number | null,
+    getNextPageParam: (page) =>
+      page.length === AUDIT_PAGE ? (page[page.length - 1]?.id ?? undefined) : undefined,
   })
 }
 

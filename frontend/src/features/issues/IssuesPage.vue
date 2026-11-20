@@ -16,6 +16,7 @@ import { Input } from '@/shared/ui/input'
 import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { Pager } from '@/shared/ui/pager'
 
 import { type IssueFilters, SORTS, type Sort, STATUSES, type StatusFilter, useIssues } from './api'
 
@@ -38,6 +39,7 @@ const status = computed(() =>
 )
 const sort = computed(() => pick<Sort>(one(route.query, 'sort'), SORTS, 'last_seen'))
 const q = computed(() => one(route.query, 'q'))
+const page = computed(() => Math.max(1, Number.parseInt(one(route.query, 'page'), 10) || 1))
 const typed = ref(q.value)
 watch(q, (value) => (typed.value = value))
 
@@ -46,8 +48,11 @@ function update(changes: Record<string, string>): void {
     status: status.value,
     sort: sort.value,
     q: q.value,
+    // Another filter starts from the first page.
+    page: 'page' in changes ? (changes.page ?? '1') : '1',
     ...changes,
   }
+  if (query.page === '1') delete query.page
   if (query.status === 'unresolved') delete query.status
   if (query.sort === 'last_seen') delete query.sort
   if (!query.q) delete query.q
@@ -60,8 +65,10 @@ const filters = computed<IssueFilters>(() => ({
   status: status.value,
   sort: sort.value,
   q: q.value,
+  page: page.value,
 }))
 const issues = useIssues(filters)
+const list = computed(() => issues.data.value?.items ?? [])
 const events = (n: number) => t('issues.eventCount', { n: formatNumber(n) }, n)
 const several = computed(() => scope.project === null)
 </script>
@@ -114,7 +121,7 @@ const several = computed(() => scope.project === null)
       {{ t('common.loading') }}
     </p>
     <EmptyState
-      v-else-if="(issues.data.value ?? []).length === 0"
+      v-else-if="list.length === 0 && page === 1"
       :title="t('issues.empty')"
       :description="status === 'unresolved' ? t('issues.emptyHint') : undefined"
     />
@@ -130,7 +137,7 @@ const several = computed(() => scope.project === null)
       </div>
       <ul class="divide-y" :aria-label="t('issues.list')">
         <li
-          v-for="issue in issues.data.value"
+          v-for="issue in list"
           :key="issue.id"
           class="grid gap-1 px-4 py-3 hover:bg-accent/50 md:grid-cols-[minmax(0,1fr)_5rem_5rem_8rem] md:items-center md:gap-3"
         >
@@ -180,5 +187,10 @@ const several = computed(() => scope.project === null)
         </li>
       </ul>
     </div>
+    <Pager
+      :page="page"
+      :has-next="issues.data.value?.hasNext ?? false"
+      @update:page="(next) => update({ page: String(next) })"
+    />
   </div>
 </template>

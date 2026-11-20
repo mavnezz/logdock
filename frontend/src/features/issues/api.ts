@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, type MaybeRefOrGetter, toValue } from 'vue'
 
 import { api, unwrap } from '@/shared/api/client'
@@ -24,19 +24,32 @@ export interface IssueFilters {
   status: StatusFilter
   sort: Sort
   q: string
+  /** From 1. */
+  page: number
 }
 
+export const PAGE_SIZE = 50
+
+/** One page of issues, and whether another follows. */
 export function useIssues(filters: MaybeRefOrGetter<IssueFilters>) {
   return useQuery({
     queryKey: computed(() => ['issues', toValue(filters)]),
-    queryFn: () => {
+    queryFn: async () => {
       const f = toValue(filters)
-      const query: Record<string, string> = { status: f.status, sort: f.sort, limit: '100' }
+      const query: Record<string, string> = {
+        status: f.status,
+        sort: f.sort,
+        // One more than shown tells whether a next page exists.
+        limit: String(PAGE_SIZE + 1),
+        offset: String((f.page - 1) * PAGE_SIZE),
+      }
       if (f.project !== null) query.project = String(f.project)
       if (f.environment !== null) query.environment = String(f.environment)
       if (f.q.trim()) query.q = f.q.trim()
-      return unwrap(api.GET('/api/v1/issues', { params: { query } }))
+      const items = await unwrap(api.GET('/api/v1/issues', { params: { query } }))
+      return { items: items.slice(0, PAGE_SIZE), hasNext: items.length > PAGE_SIZE }
     },
+    placeholderData: (previous) => previous,
     refetchInterval: 30_000,
   })
 }
@@ -50,15 +63,24 @@ export function useIssue(id: MaybeRefOrGetter<number>) {
   })
 }
 
+const EVENTS_PAGE = 50
+
+/** An issue's events, newest first, a page at a time. */
 export function useIssueEvents(id: MaybeRefOrGetter<number>) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: computed(() => ['issues', 'detail', toValue(id), 'events']),
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       unwrap(
         api.GET('/api/v1/issues/{id}/events', {
-          params: { path: { id: toValue(id) }, query: { limit: 50 } },
+          params: {
+            path: { id: toValue(id) },
+            query: { limit: EVENTS_PAGE, before: pageParam || undefined },
+          },
         }),
       ),
+    initialPageParam: '',
+    getNextPageParam: (page) =>
+      page.length === EVENTS_PAGE ? (page[page.length - 1]?.time ?? undefined) : undefined,
   })
 }
 
