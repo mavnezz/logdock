@@ -130,11 +130,31 @@ describe('a project’s page', () => {
     button('Settings').click()
     await flushPromises()
     await wrapper.find('#settings-notify').setValue('ops@example.com\nlead@example.com')
+    expect((wrapper.find('#settings-overrides').element as HTMLTextAreaElement).value).toBe(
+      'GET /health = 0',
+    )
+    await wrapper.find('#settings-request-ms').setValue('')
+    await wrapper.find('#settings-job-ms').setValue('30000')
+    await wrapper
+      .find('#settings-overrides')
+      .setValue('POST /payments = 5000\nnonsense\nGET /health = 0')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
     const patch = api.calls.find((c) => c.method === 'PATCH')!
-    const body = (await patch.json()) as { settings: { notify: string[] } }
+    const body = (await patch.json()) as {
+      settings: { notify: string[]; performance: Record<string, unknown> }
+    }
     expect(body.settings.notify).toEqual(['ops@example.com', 'lead@example.com'])
+    expect(body.settings.performance).toEqual({
+      request_ms: null,
+      job_ms: 30000,
+      slow_query_ms: 1000,
+      n_plus_one: true,
+      overrides: [
+        { name: 'POST /payments', ms: 5000 },
+        { name: 'GET /health', ms: 0 },
+      ],
+    })
     expect(wrapper.text()).toContain('Saved.')
   })
 

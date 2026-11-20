@@ -7,6 +7,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use logdock_identity::domain::Permission;
+use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
 use logdock_kernel::{EnvironmentId, ProjectId};
 use logdock_projects::application::ProjectChanges;
@@ -57,6 +58,52 @@ pub struct Redaction {
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct Threshold {
+    /// A route as Logdock names it (`POST /payments`) or a job's class.
+    pub name: String,
+    /// Milliseconds; 0 turns it off for this one.
+    pub ms: u32,
+}
+
+/// When requests, jobs and queries become performance issues.
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct Performance {
+    /// A request slower than this many milliseconds; `null` is off.
+    pub request_ms: Option<u32>,
+    /// A queued job slower than this; `null` is off.
+    pub job_ms: Option<u32>,
+    /// Single routes or jobs with a threshold of their own.
+    pub overrides: Vec<Threshold>,
+    /// The same query run again and again in a row (N+1).
+    pub n_plus_one: bool,
+    /// A single SELECT slower than this; `null` is off.
+    pub slow_query_ms: Option<u32>,
+}
+
+impl Default for Performance {
+    fn default() -> Self {
+        Self::from(&PerformanceRules::default())
+    }
+}
+
+impl From<&PerformanceRules> for Performance {
+    fn from(rules: &PerformanceRules) -> Self {
+        Self {
+            request_ms: rules.request_ms,
+            job_ms: rules.job_ms,
+            overrides: rules
+                .overrides
+                .iter()
+                .map(|(name, ms)| Threshold { name: name.clone(), ms: *ms })
+                .collect(),
+            n_plus_one: rules.n_plus_one,
+            slow_query_ms: rules.slow_query_ms,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct Settings {
     /// Who gets e-mail about the project's errors, also people without an
     /// account.
@@ -65,6 +112,8 @@ pub struct Settings {
     pub notify_regressions: bool,
     pub notify_monitors: bool,
     pub redaction: Redaction,
+    #[serde(default)]
+    pub performance: Performance,
 }
 
 impl From<&ProjectSettings> for Settings {
@@ -80,6 +129,7 @@ impl From<&ProjectSettings> for Settings {
                 scrub_emails: settings.redaction.scrub_emails,
                 scrub_ip_addresses: settings.redaction.scrub_ip_addresses,
             },
+            performance: Performance::from(&settings.performance),
         }
     }
 }
@@ -106,6 +156,20 @@ impl Settings {
                 allowed_keys: self.redaction.allowed_keys.map(trimmed),
                 scrub_emails: self.redaction.scrub_emails,
                 scrub_ip_addresses: self.redaction.scrub_ip_addresses,
+            },
+            performance: PerformanceRules {
+                request_ms: self.performance.request_ms.filter(|ms| *ms > 0),
+                job_ms: self.performance.job_ms.filter(|ms| *ms > 0),
+                overrides: self
+                    .performance
+                    .overrides
+                    .into_iter()
+                    .map(|t| (t.name.trim().to_owned(), t.ms))
+                    .filter(|(name, _)| !name.is_empty())
+                    .take(200)
+                    .collect(),
+                n_plus_one: self.performance.n_plus_one,
+                slow_query_ms: self.performance.slow_query_ms.filter(|ms| *ms > 0),
             },
         })
     }

@@ -24,8 +24,30 @@ const list = (text: string) =>
     .map((v) => v.trim())
     .filter(Boolean)
 
+/** Milliseconds as typed; empty is off. */
+const millis = (text: string) => {
+  const value = Number.parseInt(text, 10)
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+const msText = (value: number | null | undefined) => (value ? String(value) : '')
+
+/** `GET /orders/{order} = 500`, one per line. */
+function thresholds(text: string) {
+  return text
+    .split('\n')
+    .map((line) => {
+      const at = line.lastIndexOf('=')
+      if (at < 0) return null
+      const ms = Number.parseInt(line.slice(at + 1), 10)
+      const name = line.slice(0, at).trim()
+      return name && Number.isFinite(ms) && ms >= 0 ? { name, ms } : null
+    })
+    .filter((t): t is { name: string; ms: number } => t !== null)
+}
+
 function fromProject(project: Project) {
   const s = project.settings
+  const p = s.performance
   return {
     name: project.name,
     notify: lines(s.notify),
@@ -37,6 +59,11 @@ function fromProject(project: Project) {
     allowedKeys: lines(s.redaction.allowed_keys),
     scrubEmails: s.redaction.scrub_emails,
     scrubIps: s.redaction.scrub_ip_addresses,
+    requestMs: msText(p?.request_ms),
+    jobMs: msText(p?.job_ms),
+    slowQueryMs: msText(p?.slow_query_ms),
+    nPlusOne: p?.n_plus_one ?? true,
+    overrides: (p?.overrides ?? []).map((o) => `${o.name} = ${o.ms}`).join('\n'),
   }
 }
 
@@ -61,6 +88,13 @@ async function save(): Promise<void> {
         allowed_keys: form.allowOnly ? list(form.allowedKeys) : null,
         scrub_emails: form.scrubEmails,
         scrub_ip_addresses: form.scrubIps,
+      },
+      performance: {
+        request_ms: millis(form.requestMs),
+        job_ms: millis(form.jobMs),
+        slow_query_ms: millis(form.slowQueryMs),
+        n_plus_one: form.nPlusOne,
+        overrides: thresholds(form.overrides),
       },
     },
   })
@@ -152,6 +186,48 @@ async function save(): Promise<void> {
       >
       <label class="flex items-center gap-3 text-sm"
         ><Switch v-model="form.scrubIps" />{{ t('settings.scrubIps') }}</label
+      >
+    </fieldset>
+
+    <fieldset class="grid gap-3">
+      <legend class="mb-1 font-medium">{{ t('settings.performance') }}</legend>
+      <p class="text-sm text-muted-foreground">{{ t('settings.performanceHint') }}</p>
+      <div class="grid gap-3 sm:grid-cols-3">
+        <FormField :label="t('settings.requestMs')" for="settings-request-ms">
+          <Input
+            id="settings-request-ms"
+            v-model="form.requestMs"
+            inputmode="numeric"
+            placeholder="–"
+          />
+        </FormField>
+        <FormField :label="t('settings.jobMs')" for="settings-job-ms">
+          <Input id="settings-job-ms" v-model="form.jobMs" inputmode="numeric" placeholder="–" />
+        </FormField>
+        <FormField :label="t('settings.slowQueryMs')" for="settings-query-ms">
+          <Input
+            id="settings-query-ms"
+            v-model="form.slowQueryMs"
+            inputmode="numeric"
+            placeholder="–"
+          />
+        </FormField>
+      </div>
+      <FormField
+        :label="t('settings.overrides')"
+        for="settings-overrides"
+        :hint="t('settings.overridesHint')"
+      >
+        <textarea
+          id="settings-overrides"
+          v-model="form.overrides"
+          rows="3"
+          placeholder="POST /payments = 5000"
+          class="w-full rounded-md border bg-transparent px-2.5 py-1.5 font-mono text-sm shadow-xs dark:bg-input/30"
+        />
+      </FormField>
+      <label class="flex items-center gap-3 text-sm"
+        ><Switch v-model="form.nPlusOne" />{{ t('settings.nPlusOne') }}</label
       >
     </fieldset>
 

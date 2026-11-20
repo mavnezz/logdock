@@ -112,7 +112,7 @@ const de: Messages = {
     expand: 'Aufklappen',
     collapse: 'Zuklappen',
     times: '{count}×',
-    errorHere: 'Fehler hier',
+    errorHere: 'das Event',
     categories: {
       db: 'Datenbank',
       http: 'Ausgehende Requests',
@@ -433,6 +433,16 @@ const de: Messages = {
     copied: 'Kopiert',
   },
   settings: {
+    performance: 'Performance-Issues',
+    performanceHint:
+      'Ein Request, Job oder eine Query über der Schwelle sowie dieselbe Query immer wieder (N+1) werden zu Issues und wie neue per Mail gemeldet. In Millisekunden; leer ist aus.',
+    requestMs: 'Requests über (ms)',
+    jobMs: 'Jobs über (ms)',
+    slowQueryMs: 'SELECTs über (ms)',
+    overrides: 'Eigene Schwellen',
+    overridesHint:
+      'Eine pro Zeile: Route oder Job wie auf der Performance-Seite, = und Millisekunden; 0 ist aus.',
+    nPlusOne: 'N+1-Queries finden: 5 oder mehr derselben Query hintereinander, zusammen 50 ms',
     notifications: 'E-Mail-Benachrichtigungen',
     notify: 'Adressen',
     notifyHint: 'Eine pro Zeile; auch Leute ohne Konto.',

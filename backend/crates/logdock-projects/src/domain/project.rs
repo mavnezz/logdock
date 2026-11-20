@@ -1,5 +1,6 @@
 use std::fmt;
 
+use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
 use logdock_kernel::{EnvironmentId, ProjectId, Timestamp};
 
@@ -119,6 +120,8 @@ pub struct ProjectSettings {
     /// Scheduled tasks that failed or did not run (R2).
     pub notify_monitors: bool,
     pub redaction: RedactionRules,
+    /// When requests, jobs and queries become performance issues.
+    pub performance: PerformanceRules,
 }
 
 impl Default for ProjectSettings {
@@ -129,6 +132,7 @@ impl Default for ProjectSettings {
             notify_regressions: true,
             notify_monitors: true,
             redaction: RedactionRules::default(),
+            performance: PerformanceRules::default(),
         }
     }
 }

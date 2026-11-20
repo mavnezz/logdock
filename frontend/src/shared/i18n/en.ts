@@ -111,7 +111,7 @@ const en = {
     expand: 'Expand',
     collapse: 'Collapse',
     times: '{count}×',
-    errorHere: 'error here',
+    errorHere: 'the event',
     categories: {
       db: 'Database',
       http: 'Outgoing requests',
@@ -419,6 +419,16 @@ const en = {
     copied: 'Copied',
   },
   settings: {
+    performance: 'Performance issues',
+    performanceHint:
+      'A request, job or query over its threshold, and the same query run again and again (N+1), become issues and are mailed as new ones. In milliseconds; empty is off.',
+    requestMs: 'Requests over (ms)',
+    jobMs: 'Jobs over (ms)',
+    slowQueryMs: 'SELECTs over (ms)',
+    overrides: 'Own thresholds',
+    overridesHint:
+      'One per line: a route or job as the performance page names it, = and milliseconds; 0 is off.',
+    nPlusOne: 'Find N+1 queries: 5 or more of the same query in a row, 50 ms together',
     notifications: 'E-mail notifications',
     notify: 'Addresses',
     notifyHint: 'One per line; also people without an account.',

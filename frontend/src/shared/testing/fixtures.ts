@@ -39,6 +39,13 @@ export function project(overrides: Partial<Project> = {}): Project {
         scrub_emails: false,
         scrub_ip_addresses: false,
       },
+      performance: {
+        request_ms: 2000,
+        job_ms: null,
+        overrides: [{ name: 'GET /health', ms: 0 }],
+        n_plus_one: true,
+        slow_query_ms: 1000,
+      },
     },
     ...overrides,
   }

@@ -2,6 +2,7 @@
 //! endpoint for the SDKs, and NDJSON for forwarders. Neither is part of the
 //! interface's API, and neither uses sessions: a key lets data in.
 
+mod findings;
 mod ndjson;
 mod sentry;
 mod value;
@@ -22,6 +23,7 @@ use logdock_kernel::{PortError, ProjectId};
 use logdock_logs::application::IngestError;
 use logdock_monitors::application::MonitorError;
 use logdock_performance::application::PerformanceError;
+use logdock_performance::domain::{Transaction, findings as performance_findings};
 use logdock_projects::application::{IngestScope, Stage, StageFor};
 use logdock_projects::domain::{Rejection, Tally};
 use logdock_sentry::{Envelope, LogItems};
@@ -56,6 +58,7 @@ impl Default for IngestConfig {
 pub(crate) struct IngestGuard {
     buckets: Mutex<HashMap<i64, (f64, Instant)>>,
     disk: Mutex<Option<(bool, Instant)>>,
+    findings: findings::Reported,
 }
 
 const DISK_CHECK_EVERY: Duration = Duration::from_secs(5);
@@ -212,6 +215,23 @@ fn unavailable() -> Response {
     refuse(StatusCode::SERVICE_UNAVAILABLE, "unavailable", Some(Duration::from_secs(30)))
 }
 
+/// Turns what a transaction shows of the project's performance rules into
+/// issues. A failure here costs the issue, never the transaction.
+async fn report_findings(state: &ApiState, scope: &IngestScope, stage: &Stage, transaction: &Transaction) {
+    for finding in performance_findings(transaction, &scope.settings.performance) {
+        let key = format!("{}\u{1f}{}", stage.scope.environment.get(), finding.fingerprint().join("\u{1f}"));
+        if !state.ingest_guard.findings.take(key) {
+            continue;
+        }
+        let payload = value::value(findings::event(transaction, &finding, stage.name.as_str()));
+        let policy = notify_policy(scope, stage);
+        let rules = &scope.settings.redaction;
+        if let Err(error) = state.issues.ingest.execute(stage.scope, rules, &policy, payload, None).await {
+            tracing::warn!(%error, kind = finding.kind.as_str(), "cannot keep a performance issue");
+        }
+    }
+}
+
 /// Who hears of the stage's issues, from the project's settings.
 fn notify_policy(scope: &IngestScope, stage: &Stage) -> NotifyPolicy {
     let settings = &scope.settings;
@@ -361,7 +381,10 @@ async fn envelope(
             let payload = value::value(transaction);
             match state.performance.ingest.execute(stage.scope, rules, payload, envelope.sample_rate()).await
             {
-                Ok(_) => tally.accepted += 1,
+                Ok(transaction) => {
+                    tally.accepted += 1;
+                    report_findings(&state, &scope, &stage, &transaction).await;
+                }
                 Err(PerformanceError::Port(error)) => {
                     tracing::error!(%error, "cannot keep a transaction");
                     record.execute(project, Some(scope.key), &tally).await;

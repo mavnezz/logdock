@@ -4026,6 +4026,55 @@
         },
         "additionalProperties": false
       },
+      "Performance": {
+        "type": "object",
+        "description": "When requests, jobs and queries become performance issues.",
+        "properties": {
+          "job_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "A queued job slower than this; `null` is off.",
+            "default": null,
+            "minimum": 0
+          },
+          "n_plus_one": {
+            "type": "boolean",
+            "description": "The same query run again and again in a row (N+1).",
+            "default": true
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Threshold"
+            },
+            "description": "Single routes or jobs with a threshold of their own.",
+            "default": []
+          },
+          "request_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "A request slower than this many milliseconds; `null` is off.",
+            "default": 2000,
+            "minimum": 0
+          },
+          "slow_query_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "A single SELECT slower than this; `null` is off.",
+            "default": 1000,
+            "minimum": 0
+          }
+        }
+      },
       "Problem": {
         "type": "object",
         "description": "Error body as defined by RFC 9457 (`application/problem+json`).",
@@ -4395,6 +4444,9 @@
           "notify_regressions": {
             "type": "boolean"
           },
+          "performance": {
+            "$ref": "#/components/schemas/Performance"
+          },
           "redaction": {
             "$ref": "#/components/schemas/Redaction"
           }
@@ -4720,6 +4772,25 @@
             "type": "integer",
             "description": "How many addresses it went to.",
             "minimum": 0
+          }
+        }
+      },
+      "Threshold": {
+        "type": "object",
+        "required": [
+          "name",
+          "ms"
+        ],
+        "properties": {
+          "ms": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Milliseconds; 0 turns it off for this one.",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "A route as Logdock names it (`POST /payments`) or a job's class."
           }
         }
       },

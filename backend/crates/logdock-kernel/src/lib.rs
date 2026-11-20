@@ -7,6 +7,7 @@ mod audit;
 mod error;
 mod ids;
 mod mail;
+pub mod performance;
 pub mod redaction;
 mod request;
 mod secret;

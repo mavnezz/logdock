@@ -146,6 +146,7 @@ async function main() {
   await scenario('job')
   await scenario('work')
   await scenario('slow')
+  await scenario('n-plus-one')
   // Through Nginx, for the forwarders.
   for (const [path, status] of [
     ['/scenario/buffered', 200],
@@ -260,6 +261,20 @@ async function main() {
     const fail = await named('request', 'GET /scenario/fail')
     expect(fail.flagged === 1, 'the 500 is a failure')
     return `GET /scenario/work ${work.count}×, p95 ${work.p95_ms} ms`
+  })
+  await check('an N+1 query becomes a performance issue', async () => {
+    const issue = await eventually('the N+1 issue', async () =>
+      (await logdock.get(`/api/v1/issues?project=${project.id}&limit=100`)).find((i) =>
+        i.title.startsWith('N+1 query:'),
+      ),
+    )
+    expect(issue.culprit === 'GET /scenario/n-plus-one', `culprit ${issue.culprit}`)
+    expect(issue.level === 'warning', `level ${issue.level}`)
+    const detail = await logdock.get(`/api/v1/issues/${issue.id}`)
+    const found = detail.latest.contexts.performance
+    expect(found.count === 8, `${found.count} in a row`)
+    expect(detail.latest.trace_id, 'the issue leads to its trace')
+    return `${issue.title} (${found.count}×, ${found.total_ms} ms)`
   })
   await check('a request’s trace holds the job it queued', async () => {
     const samples = await logdock.get(

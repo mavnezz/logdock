@@ -50,6 +50,20 @@ Route::get('/scenario/work', function () {
     return ['orders' => count($orders), 'rate' => $rate, 'health' => $health];
 });
 
+// An N+1 query: one statement per item, each long enough (a recursive count
+// in SQLite) that together they cost more than 50 ms.
+Route::get('/scenario/n-plus-one', function () {
+    $items = [];
+    foreach (range(1, 8) as $item) {
+        $items[] = DB::selectOne(
+            'with recursive c(x) as (select 1 union all select x + 1 from c where x < ?) select count(*) as n, ? as item from c',
+            [60_000, $item],
+        )->n;
+    }
+
+    return ['items' => count($items)];
+});
+
 Route::get('/scenario/slow', function () {
     usleep(300_000);
 

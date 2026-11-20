@@ -1102,6 +1102,37 @@ export interface components {
             current: string;
             new: string;
         };
+        /** @description When requests, jobs and queries become performance issues. */
+        Performance: {
+            /**
+             * Format: int32
+             * @description A queued job slower than this; `null` is off.
+             * @default null
+             */
+            job_ms: number | null;
+            /**
+             * @description The same query run again and again in a row (N+1).
+             * @default true
+             */
+            n_plus_one: boolean;
+            /**
+             * @description Single routes or jobs with a threshold of their own.
+             * @default []
+             */
+            overrides: components["schemas"]["Threshold"][];
+            /**
+             * Format: int32
+             * @description A request slower than this many milliseconds; `null` is off.
+             * @default 2000
+             */
+            request_ms: number | null;
+            /**
+             * Format: int32
+             * @description A single SELECT slower than this; `null` is off.
+             * @default 1000
+             */
+            slow_query_ms: number | null;
+        };
         /** @description Error body as defined by RFC 9457 (`application/problem+json`). */
         Problem: {
             /** @description Stable, machine-readable identifier the frontend relies on, e.g. `not_found`. */
@@ -1212,6 +1243,7 @@ export interface components {
             notify_monitors: boolean;
             notify_new_issues: boolean;
             notify_regressions: boolean;
+            performance?: components["schemas"]["Performance"];
             redaction: components["schemas"]["Redaction"];
         };
         SetupRequest: {
@@ -1324,6 +1356,15 @@ export interface components {
         TestMailSent: {
             /** @description How many addresses it went to. */
             recipients: number;
+        };
+        Threshold: {
+            /**
+             * Format: int32
+             * @description Milliseconds; 0 turns it off for this one.
+             */
+            ms: number;
+            /** @description A route as Logdock names it (`POST /payments`) or a job's class. */
+            name: string;
         };
         Token: {
             created_at: string;

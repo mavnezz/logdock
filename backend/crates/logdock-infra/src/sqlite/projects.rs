@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use logdock_kernel::performance::PerformanceRules;
 use logdock_kernel::redaction::RedactionRules;
 use logdock_kernel::{EnvironmentId, PortError, ProjectId, Timestamp};
 use logdock_projects::application::ports::ProjectRepository;
@@ -39,6 +40,11 @@ struct SettingsJson {
     redaction_allowed_keys: Option<Vec<String>>,
     scrub_emails: bool,
     scrub_ip_addresses: bool,
+    perf_request_ms: Option<u32>,
+    perf_job_ms: Option<u32>,
+    perf_overrides: Vec<(String, u32)>,
+    perf_n_plus_one: bool,
+    perf_slow_query_ms: Option<u32>,
 }
 
 impl Default for SettingsJson {
@@ -58,6 +64,11 @@ impl From<&ProjectSettings> for SettingsJson {
             redaction_allowed_keys: settings.redaction.allowed_keys.clone(),
             scrub_emails: settings.redaction.scrub_emails,
             scrub_ip_addresses: settings.redaction.scrub_ip_addresses,
+            perf_request_ms: settings.performance.request_ms,
+            perf_job_ms: settings.performance.job_ms,
+            perf_overrides: settings.performance.overrides.clone(),
+            perf_n_plus_one: settings.performance.n_plus_one,
+            perf_slow_query_ms: settings.performance.slow_query_ms,
         }
     }
 }
@@ -74,6 +85,13 @@ impl SettingsJson {
                 allowed_keys: self.redaction_allowed_keys,
                 scrub_emails: self.scrub_emails,
                 scrub_ip_addresses: self.scrub_ip_addresses,
+            },
+            performance: PerformanceRules {
+                request_ms: self.perf_request_ms,
+                job_ms: self.perf_job_ms,
+                overrides: self.perf_overrides,
+                n_plus_one: self.perf_n_plus_one,
+                slow_query_ms: self.perf_slow_query_ms,
             },
         }
     }

@@ -339,6 +339,12 @@ Contexts `logdock-performance` and `logdock-monitors`, checked against sentry-la
   stopped) it catches up 100 missed runs per task and minute.
 - **Mail** goes to the project's addresses (setting "scheduled tasks that fail or do not run") when a task turns from
   good to failing, missed or too long, and when it runs again; not for every failed run.
+- **Performance issues** come from each transaction as it arrives, by the project's rules (kernel
+  `PerformanceRules`, kept with its settings): an N+1 query (5 or more of one normalized statement in a row under one
+  parent, 50 ms or more together, as Sentry detects it), a `SELECT` over its threshold (1 s), a request (2 s) or job
+  (off) over its threshold, also per route or job. Each finding becomes an error event of level `warning` with its own
+  fingerprint (`performance`, kind, transaction, statement), so it is an issue like any other: mailed when new, with
+  its trace and the span to look at. A finding is reported once a minute per stage at most.
 
 ### 4.4 Correlation
 

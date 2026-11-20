@@ -192,6 +192,13 @@ services:
 - **What is measured** per request: the request itself, its SQL statements
   (with their values replaced), outgoing HTTP requests by host, and cache
   operations; a queued job continues the trace of the request that queued it.
+- **Performance issues**, from what is measured, as Sentry and Nightwatch
+  report them: the same query 5 or more times in a row costing 50 ms or more
+  (N+1), a `SELECT` over 1 s, a request over 2 s, and a job over its
+  threshold (none by default). Each is an issue of its own, mailed when new,
+  with the request's flow on its page; a problem is counted at most once a
+  minute. The project's *Settings* change the thresholds, also per route or
+  job (`POST /payments = 5000`).
 - **What an error keeps of its request**, as Sentry shows it: every header,
   with credentials (`Authorization`, `Cookie`, CSRF tokens) blanked; the body,
   with passwords, tokens and card numbers blanked, and left out above 16 KiB;

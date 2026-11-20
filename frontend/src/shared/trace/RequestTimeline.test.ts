@@ -78,7 +78,7 @@ describe('the request timeline', () => {
     expect(wrapper.find('[role="img"]').attributes('aria-label')).toBe('Where the time went')
     expect(text()).toContain('Outgoing requests')
     expect(text()).toContain('3×')
-    expect(text()).toContain('error here')
+    expect(text()).toContain('the event')
     // The queued job is folded under the span that queued it.
     expect(text()).toContain('App\\Jobs\\ChargeOrder')
     expect(text()).not.toContain('insert into payments')
