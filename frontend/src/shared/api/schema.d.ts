@@ -590,6 +590,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/queues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The queues over a range: what was put in and ran, what failed, and how
+         *     long jobs waited and ran. As in sentry-laravel, the queue is the job's
+         *     `messaging.destination.name`; jobs run without tracing are not counted.
+         */
+        get: operations["queues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/setup": {
         parameters: {
             query?: never;
@@ -1158,6 +1179,26 @@ export interface components {
             id: number;
             name: string;
             settings: components["schemas"]["Settings"];
+        };
+        QueueStats: {
+            /** Format: int64 */
+            failed: number;
+            /** @description The queue: `default`, `emails`, … */
+            name: string;
+            /**
+             * Format: int64
+             * @description Jobs that ran from it; of them, those that failed and the retries.
+             */
+            processed: number;
+            processing?: components["schemas"]["Stats"] | null;
+            /**
+             * Format: int64
+             * @description Jobs put into it by the requests, jobs and commands measured.
+             */
+            published: number;
+            /** Format: int64 */
+            retries: number;
+            wait?: components["schemas"]["Stats"] | null;
         };
         Redaction: {
             /** @description When set, only these attribute keys are kept; `user.*` keeps a prefix. */
@@ -2351,7 +2392,10 @@ export interface operations {
     overview: {
         parameters: {
             query: {
-                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                /**
+                 * @description `request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,
+                 *     or of queues `queue_wait`, `queue_process`, `queue_publish`.
+                 */
                 kind: string;
                 /** @description Project IDs, comma-separated. */
                 project?: string;
@@ -2391,7 +2435,10 @@ export interface operations {
     samples: {
         parameters: {
             query: {
-                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                /**
+                 * @description `request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,
+                 *     or of queues `queue_wait`, `queue_process`, `queue_publish`.
+                 */
                 kind: string;
                 /** @description Project IDs, comma-separated. */
                 project?: string;
@@ -2433,7 +2480,10 @@ export interface operations {
     series: {
         parameters: {
             query: {
-                /** @description `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`. */
+                /**
+                 * @description `request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,
+                 *     or of queues `queue_wait`, `queue_process`, `queue_publish`.
+                 */
                 kind: string;
                 /** @description Project IDs, comma-separated. */
                 project?: string;
@@ -2873,6 +2923,41 @@ export interface operations {
             };
             /** @description `mail_failed`: what the mail server said */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    queues: {
+        parameters: {
+            query?: {
+                /** @description Project IDs, comma-separated. */
+                project?: string;
+                /** @description Stage IDs, comma-separated. */
+                environment?: string;
+                /** @description RFC 3339; the last 24 hours by default. */
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueStats"][];
+                };
+            };
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

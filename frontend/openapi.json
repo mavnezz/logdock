@@ -1493,7 +1493,7 @@
           {
             "name": "kind",
             "in": "query",
-            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,\nor of queues `queue_wait`, `queue_process`, `queue_publish`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1595,7 +1595,7 @@
           {
             "name": "kind",
             "in": "query",
-            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,\nor of queues `queue_wait`, `queue_process`, `queue_publish`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1706,7 +1706,7 @@
           {
             "name": "kind",
             "in": "query",
-            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.",
+            "description": "`request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,\nor of queues `queue_wait`, `queue_process`, `queue_publish`.",
             "required": true,
             "schema": {
               "type": "string"
@@ -2392,6 +2392,80 @@
           },
           "502": {
             "description": "`mail_failed`: what the mail server said",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/queues": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "The queues over a range: what was put in and ran, what failed, and how\nlong jobs waited and ran. As in sentry-laravel, the queue is the job's\n`messaging.destination.name`; jobs run without tracing are not counted.",
+        "operationId": "queues",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "description": "Project IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "environment",
+            "in": "query",
+            "description": "Stage IDs, comma-separated.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; the last 24 hours by default.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QueueStats"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4158,6 +4232,66 @@
           },
           "settings": {
             "$ref": "#/components/schemas/Settings"
+          }
+        }
+      },
+      "QueueStats": {
+        "type": "object",
+        "required": [
+          "name",
+          "published",
+          "processed",
+          "failed",
+          "retries"
+        ],
+        "properties": {
+          "failed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "The queue: `default`, `emails`, …"
+          },
+          "processed": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Jobs that ran from it; of them, those that failed and the retries.",
+            "minimum": 0
+          },
+          "processing": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Stats",
+                "description": "Running."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Jobs put into it by the requests, jobs and commands measured.",
+            "minimum": 0
+          },
+          "retries": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "wait": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Stats",
+                "description": "From being queued to running."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },

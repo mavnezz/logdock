@@ -192,6 +192,10 @@ services:
 - **What is measured** per request: the request itself, its SQL statements
   (with their values replaced), outgoing HTTP requests by host, and cache
   operations; a queued job continues the trace of the request that queued it.
+- **Queues**: a job measured with tracing counts under its queue
+  (`messaging.destination.name`): how long it waited from being queued to
+  running, how long it ran, whether it failed or was a retry; the requests
+  and jobs that queued it count as *put in*.
 - **Performance issues**, from what is measured, as Sentry and Nightwatch
   report them: the same query 5 or more times in a row costing 50 ms or more
   (N+1), a `SELECT` over 1 s, a request over 2 s, and a job over its

@@ -220,6 +220,7 @@ mod tests {
             service: None,
             host: None,
             container: None,
+            queue: None,
             spans,
         }
     }

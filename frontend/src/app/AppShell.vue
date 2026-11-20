@@ -4,11 +4,12 @@ import {
   Bug,
   CalendarClock,
   FolderKanban,
+  Layers,
   LogOut,
-  type LucideIcon,
   Menu,
   ScrollText,
   ShieldCheck,
+  type LucideIcon,
   UserRound,
   Users,
 } from 'lucide-vue-next'
@@ -37,6 +38,7 @@ const icons: Record<string, LucideIcon> = {
   logs: ScrollText,
   issues: Bug,
   performance: Activity,
+  queues: Layers,
   monitors: CalendarClock,
 }
 

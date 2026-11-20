@@ -20,11 +20,28 @@ pub enum Kind {
     Outgoing,
     /// Cache operations, by operation and key.
     Cache,
+    /// How long jobs waited in a queue before they ran, by queue; flagged
+    /// when the job was a retry.
+    QueueWait,
+    /// How long jobs of a queue ran, by queue; flagged when they failed.
+    QueueProcess,
+    /// Jobs put into a queue (`queue.publish` spans), by queue.
+    QueuePublish,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 7] =
-        [Kind::Request, Kind::Job, Kind::Command, Kind::Other, Kind::Query, Kind::Outgoing, Kind::Cache];
+    pub const ALL: [Kind; 10] = [
+        Kind::Request,
+        Kind::Job,
+        Kind::Command,
+        Kind::Other,
+        Kind::Query,
+        Kind::Outgoing,
+        Kind::Cache,
+        Kind::QueueWait,
+        Kind::QueueProcess,
+        Kind::QueuePublish,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -35,6 +52,9 @@ impl Kind {
             Kind::Query => "query",
             Kind::Outgoing => "outgoing",
             Kind::Cache => "cache",
+            Kind::QueueWait => "queue_wait",
+            Kind::QueueProcess => "queue_process",
+            Kind::QueuePublish => "queue_publish",
         }
     }
 
@@ -90,7 +110,20 @@ pub struct Transaction {
     pub host: Option<String>,
     /// The container, as the SDK names its server.
     pub container: Option<String>,
+    /// For a queued job: its queue, how long it waited, how often it ran.
+    pub queue: Option<QueueRun>,
     pub spans: Vec<Span>,
+}
+
+/// What sentry-laravel says of a queued job's run (`messaging.*`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueueRun {
+    /// `messaging.destination.name`: `default`, `emails`, …
+    pub name: String,
+    /// `messaging.message.receive.latency`: from being queued to running.
+    pub wait_us: Option<u64>,
+    /// `messaging.message.retry.count`.
+    pub retries: u32,
 }
 
 /// One thing measured: a transaction, or what one of its spans did.
@@ -206,6 +239,20 @@ impl Transaction {
             service: tag(tags, "service"),
             host: tag(tags, "host"),
             container: text(payload.get("server_name")),
+            queue: data.and_then(|d| {
+                Some(QueueRun {
+                    name: cut(text(d.get("messaging.destination.name"))?),
+                    wait_us: d
+                        .get("messaging.message.receive.latency")
+                        .and_then(Value::as_f64)
+                        .filter(|s| s.is_finite() && *s >= 0.0)
+                        .map(|s| (s * 1_000_000.0) as u64),
+                    retries: d
+                        .get("messaging.message.retry.count")
+                        .and_then(Value::as_i64)
+                        .map_or(0, |n| n.clamp(0, i64::from(u32::MAX)) as u32),
+                })
+            }),
             spans,
         })
     }
@@ -235,6 +282,22 @@ impl Transaction {
             duration_us: self.duration_us,
             flagged: self.failed(),
         }];
+        if let Some(queue) = self.queue.as_ref().filter(|_| self.kind == Kind::Job) {
+            all.push(Measurement {
+                kind: Kind::QueueProcess,
+                name: queue.name.clone(),
+                duration_us: self.duration_us,
+                flagged: self.failed(),
+            });
+            if let Some(wait_us) = queue.wait_us {
+                all.push(Measurement {
+                    kind: Kind::QueueWait,
+                    name: queue.name.clone(),
+                    duration_us: wait_us,
+                    flagged: queue.retries > 0,
+                });
+            }
+        }
         all.extend(self.spans.iter().filter_map(measure_span));
         all
     }
@@ -242,6 +305,16 @@ impl Transaction {
 
 fn measure_span(span: &Span) -> Option<Measurement> {
     let op = span.op.as_str();
+    if op == "queue.publish" {
+        let queue = text(span.data.get("messaging.destination.name"))?;
+        let flagged = failed(span.status.as_deref());
+        return Some(Measurement {
+            kind: Kind::QueuePublish,
+            name: cut(queue),
+            duration_us: span.duration_us,
+            flagged,
+        });
+    }
     let status_failed = failed(span.status.as_deref());
     let (kind, name, flagged) = if op.starts_with("db.sql") || op == "db.query" || op == "db" {
         (Kind::Query, normalize_sql(span.description.as_deref()?), status_failed)
@@ -392,6 +465,71 @@ pub(crate) mod tests {
     }
 
     /// A request as sentry-laravel 4.30 sends it (dev/laravel, /scenario/work).
+    #[test]
+    fn measures_queues_by_their_jobs_and_what_queued_them() {
+        // A job as sentry-laravel 4.30 sends it (fixture transaction-job).
+        let job = object(vec![
+            ("transaction", s("App\\Jobs\\ChargeOrder")),
+            ("start_timestamp", Value::Float(1_795_050_500.0)),
+            ("timestamp", Value::Float(1_795_050_500.2)),
+            (
+                "contexts",
+                object(vec![(
+                    "trace",
+                    object(vec![
+                        ("op", s("queue.process")),
+                        ("status", s("internal_error")),
+                        (
+                            "data",
+                            object(vec![
+                                ("messaging.destination.name", s("payments")),
+                                ("messaging.message.receive.latency", Value::Float(0.53)),
+                                ("messaging.message.retry.count", Value::Int(2)),
+                            ]),
+                        ),
+                    ]),
+                )]),
+            ),
+        ]);
+        let job = Transaction::from_payload(&job).unwrap();
+        assert_eq!(job.queue, Some(QueueRun { name: "payments".into(), wait_us: Some(530_000), retries: 2 }));
+        let measured = job.measurements();
+        let of = |kind| measured.iter().find(|m| m.kind == kind).unwrap();
+        assert_eq!(
+            (of(Kind::QueueProcess).name.as_str(), of(Kind::QueueProcess).flagged),
+            ("payments", true)
+        );
+        assert_eq!(of(Kind::QueueProcess).duration_us, 200_000);
+        assert_eq!(
+            (of(Kind::QueueWait).duration_us, of(Kind::QueueWait).flagged),
+            (530_000, true),
+            "a retry"
+        );
+
+        let mut request = request("/checkout", 200, 0.1);
+        let publish = span(
+            "queue.publish",
+            "App\\Jobs\\ChargeOrder",
+            1_795_050_499.01,
+            1_795_050_499.02,
+            object(vec![("messaging.destination.name", s("payments"))]),
+        );
+        // Added to the spans the request has already.
+        if let Value::Object(fields) = &mut request
+            && let Some((_, Value::Array(spans))) = fields.iter_mut().find(|(k, _)| k == "spans")
+        {
+            spans.push(publish);
+        }
+        let request = Transaction::from_payload(&request).unwrap();
+        assert_eq!(request.queue, None, "a request is in no queue");
+        let published = request.measurements().into_iter().find(|m| m.kind == Kind::QueuePublish).unwrap();
+        assert_eq!(published.name, "payments");
+        for kind in [Kind::QueueWait, Kind::QueueProcess, Kind::QueuePublish] {
+            assert_eq!(Kind::parse(kind.as_str()), Some(kind));
+            assert!(!kind.is_transaction());
+        }
+    }
+
     pub(crate) fn request(name: &str, status: i64, duration: f64) -> Value {
         object(vec![
             ("transaction", s(name)),

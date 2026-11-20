@@ -37,7 +37,8 @@ search_logs searches log entries (words, \"phrases\", key:value attributes, trac
 list_issues and get_issue show errors grouped into issues, with stack traces and the request; \
 get_trace shows everything that carries one trace ID, across containers (the request, the jobs it \
 queued, their logs and errors); performance shows where requests, jobs, queries and outgoing \
-requests spend their time; list_monitors shows scheduled tasks. Times are UTC; `since` takes \
+requests spend their time; list_queues shows how long queued jobs wait and run; list_monitors \
+shows scheduled tasks. Times are UTC; `since` takes \
 15m, 6h, 2d or 1w.";
 
 pub(crate) fn router(api: Router) -> Router<ApiState> {
@@ -265,6 +266,12 @@ impl Server {
                 }
                 query.push(("limit", limit(args, 20, 100)));
                 Ok(compact(self.get("/performance", &query).await?))
+            }
+            "list_queues" => {
+                let projects = self.projects().await?;
+                let mut query = scope(args, &projects)?;
+                query.extend(range(args)?);
+                Ok(compact(self.get("/queues", &query).await?))
             }
             "list_monitors" => {
                 let projects = self.projects().await?;
@@ -693,6 +700,17 @@ fn read_tools() -> Vec<Value> {
             "Where time goes",
             "Requests, jobs, commands, SQL statements, outgoing requests or cache operations over a range (24 hours by default): count, failures, p50, p95, p99 and total time.",
             performance,
+            &[],
+        ),
+        tool(
+            "list_queues",
+            "Queues",
+            "Queued jobs by their queue over a range (24 hours by default): put in, ran, failed, retries, how long they waited before running and how long they ran (p50, p95).",
+            {
+                let mut properties = scope_properties();
+                range_properties(&mut properties);
+                properties
+            },
             &[],
         ),
         tool(

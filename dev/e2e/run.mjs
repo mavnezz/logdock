@@ -276,6 +276,16 @@ async function main() {
     expect(detail.latest.trace_id, 'the issue leads to its trace')
     return `${issue.title} (${found.count}×, ${found.total_ms} ms)`
   })
+  await check('queued jobs show under their queue', async () => {
+    const queue = await eventually('the default queue', async () =>
+      (await logdock.get(`/api/v1/queues?${lastHour()}`)).find(
+        (q) => q.name === 'default' && q.processed >= 1 && q.published >= 1,
+      ),
+    )
+    expect(queue.failed === 1, `failed ${queue.failed}`)
+    expect(queue.wait && queue.wait.max_ms > 0, `waited ${JSON.stringify(queue.wait)}`)
+    return `default: ${queue.published} put in, ${queue.processed} ran, waited p95 ${queue.wait.p95_ms} ms`
+  })
   await check('a request’s trace holds the job it queued', async () => {
     const samples = await logdock.get(
       `/api/v1/performance/samples?kind=request&name=${encodeURIComponent('GET /scenario/job')}&${lastHour()}`,

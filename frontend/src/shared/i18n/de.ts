@@ -23,6 +23,7 @@ const de: Messages = {
     older: 'Ältere',
   },
   nav: {
+    queues: 'Queues',
     menu: 'Menü',
     logs: 'Logs',
     issues: 'Issues',
@@ -103,6 +104,25 @@ const de: Messages = {
       label: 'Einträge pro Level über den Zeitraum',
       groups: { debug: 'Debug', info: 'Info', warn: 'Warnung', error: 'Fehler' },
     },
+  },
+  queues: {
+    title: 'Queues',
+    description:
+      'Eingereihte Jobs nach ihrer Queue: wie viele liefen und fehlschlugen, wie lange sie vor dem Start warteten und wie lange sie liefen.',
+    empty: 'Noch keine Queue',
+    emptyHint:
+      'Jobs, die mit Tracing gemessen werden (SENTRY_TRACES_SAMPLE_RATE), erscheinen hier unter ihrer Queue, ebenso die Jobs, die Requests einreihen.',
+    jobs: 'Jobs nach Klasse',
+    queue: 'Queue',
+    processed: 'Gelaufen',
+    failed: 'Fehlgeschlagen',
+    retries: 'Wiederholungen',
+    waitP95: 'Gewartet p95',
+    runP95: 'Gelaufen p95',
+    published: 'Eingereiht',
+    waitAverage: 'Gewartet im Schnitt',
+    runAverage: 'Gelaufen im Schnitt',
+    chart: { processed: 'Gelaufene Jobs', wait: 'Warten vor dem Start', run: 'Laufzeit' },
   },
   timeline: {
     title: 'Ablauf',

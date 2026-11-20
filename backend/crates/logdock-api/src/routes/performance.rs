@@ -20,7 +20,11 @@ use crate::extract::ApiQuery;
 use crate::state::ApiState;
 
 pub(crate) fn routes() -> OpenApiRouter<ApiState> {
-    OpenApiRouter::new().routes(routes!(overview)).routes(routes!(series)).routes(routes!(samples))
+    OpenApiRouter::new()
+        .routes(routes!(overview))
+        .routes(routes!(series))
+        .routes(routes!(samples))
+        .routes(routes!(queues))
 }
 
 /// What a range of one name adds up to.
@@ -70,7 +74,8 @@ pub struct NamedStats {
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct RangeQuery {
-    /// `request`, `job`, `command`, `other`, `query`, `outgoing` or `cache`.
+    /// `request`, `job`, `command`, `other`, `query`, `outgoing`, `cache`,
+    /// or of queues `queue_wait`, `queue_process`, `queue_publish`.
     pub kind: String,
     /// Project IDs, comma-separated.
     pub project: Option<String>,
@@ -95,6 +100,99 @@ fn range(q: &RangeQuery) -> Result<RollupQuery, ApiError> {
         from,
         to,
     })
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QueueStats {
+    /// The queue: `default`, `emails`, …
+    pub name: String,
+    /// Jobs put into it by the requests, jobs and commands measured.
+    pub published: u64,
+    /// Jobs that ran from it; of them, those that failed and the retries.
+    pub processed: u64,
+    pub failed: u64,
+    pub retries: u64,
+    /// From being queued to running.
+    pub wait: Option<Stats>,
+    /// Running.
+    pub processing: Option<Stats>,
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct QueuesQuery {
+    /// Project IDs, comma-separated.
+    pub project: Option<String>,
+    /// Stage IDs, comma-separated.
+    pub environment: Option<String>,
+    /// RFC 3339; the last 24 hours by default.
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+/// The queues over a range: what was put in and ran, what failed, and how
+/// long jobs waited and ran. As in sentry-laravel, the queue is the job's
+/// `messaging.destination.name`; jobs run without tracing are not counted.
+#[utoipa::path(
+    get,
+    path = "/queues",
+    tag = "performance",
+    security(("session" = [])),
+    params(QueuesQuery),
+    responses((status = OK, body = Vec<QueueStats>), (status = BAD_REQUEST, body = Problem))
+)]
+async fn queues(
+    auth: Auth,
+    State(state): State<ApiState>,
+    ApiQuery(q): ApiQuery<QueuesQuery>,
+) -> Result<Json<Vec<QueueStats>>, ApiError> {
+    auth.require(Permission::ReadData)?;
+    let query = |kind: Kind| -> Result<RollupQuery, ApiError> {
+        let mut query = range(&RangeQuery {
+            kind: kind.as_str().to_owned(),
+            project: q.project.clone(),
+            environment: q.environment.clone(),
+            from: q.from.clone(),
+            to: q.to.clone(),
+        })?;
+        query.kind = kind;
+        Ok(query)
+    };
+    let mut queues: Vec<QueueStats> = Vec::new();
+    for kind in [Kind::QueueProcess, Kind::QueueWait, Kind::QueuePublish] {
+        for row in state.performance.overview.execute(query(kind)?, Order::Count, 500).await? {
+            let at = match queues.iter().position(|queue| queue.name == row.name) {
+                Some(at) => at,
+                None => {
+                    queues.push(QueueStats {
+                        name: row.name.clone(),
+                        published: 0,
+                        processed: 0,
+                        failed: 0,
+                        retries: 0,
+                        wait: None,
+                        processing: None,
+                    });
+                    queues.len() - 1
+                }
+            };
+            let queue = &mut queues[at];
+            match kind {
+                Kind::QueueProcess => {
+                    queue.processed = row.rollup.count;
+                    queue.failed = row.rollup.flagged;
+                    queue.processing = Some(Stats::from(&row.rollup));
+                }
+                Kind::QueueWait => {
+                    queue.retries = row.rollup.flagged;
+                    queue.wait = Some(Stats::from(&row.rollup));
+                }
+                _ => queue.published = row.rollup.count,
+            }
+        }
+    }
+    queues.sort_by(|a, b| b.processed.cmp(&a.processed).then_with(|| a.name.cmp(&b.name)));
+    Ok(Json(queues))
 }
 
 #[derive(Debug, Deserialize, IntoParams)]

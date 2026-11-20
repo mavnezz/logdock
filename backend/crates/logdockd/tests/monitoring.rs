@@ -61,6 +61,15 @@ async fn requests_jobs_and_what_they_spent_their_time_on() {
     let jobs = admin.get(&format!("/api/v1/performance?kind=job&{DAY}")).await.json();
     assert_eq!(named(&jobs, "App\\Jobs\\ChargeOrder")["flagged"], 1, "the job failed");
 
+    // The job's queue: it ran once, failed, and waited half a second.
+    let queues = admin.get(&format!("/api/v1/queues?{DAY}")).await.json();
+    let default = named(&queues, "default");
+    assert_eq!((default["processed"].as_u64(), default["failed"].as_u64()), (Some(1), Some(1)), "{queues}");
+    assert_eq!(default["retries"], 0);
+    let waited = default["wait"]["average_ms"].as_f64().unwrap();
+    assert!((529.0..531.0).contains(&waited), "{default}");
+    assert!(default["processing"]["average_ms"].as_f64().unwrap() > 0.0);
+
     let queries = admin.get(&format!("/api/v1/performance?kind=query&sort=count&{DAY}")).await.json();
     named(&queries, "select ? as id, ? as total");
     named(&queries, "delete from \"jobs\" where \"id\" = ?");

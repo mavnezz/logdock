@@ -10,6 +10,7 @@ export const REMEMBERED: Record<string, readonly string[]> = {
   '/logs': ['trace', 'before'],
   '/performance': ['page'],
   '/monitors': [],
+  '/queues': ['queue'],
 }
 
 const key = (path: string) => `logdock.filters${path}`

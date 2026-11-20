@@ -221,6 +221,7 @@ async fn claude_reads_logs_issues_and_traces_through_mcp() {
     assert_eq!(trace["logs"].as_array().unwrap().len(), 1, "{trace}");
     assert!(call(&app, &read, "performance", json!({"kind": "request", "since": "1d"})).await.is_ok());
     assert!(call(&app, &read, "list_monitors", json!({})).await.is_ok());
+    assert!(call(&app, &read, "list_queues", json!({"since": "1d"})).await.is_ok());
 
     // Mistakes come back as the tool's failure, with what to do.
     let wrong = call(&app, &read, "search_logs", json!({"project": "shop"})).await.unwrap_err();

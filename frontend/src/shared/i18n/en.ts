@@ -22,6 +22,7 @@ const en = {
     older: 'Older',
   },
   nav: {
+    queues: 'Queues',
     menu: 'Menu',
     logs: 'Logs',
     issues: 'Issues',
@@ -102,6 +103,25 @@ const en = {
       label: 'Entries per level over the time range',
       groups: { debug: 'Debug', info: 'Info', warn: 'Warning', error: 'Error' },
     },
+  },
+  queues: {
+    title: 'Queues',
+    description:
+      'Queued jobs by their queue: how many ran and failed, how long they waited before running and how long they ran.',
+    empty: 'No queue yet',
+    emptyHint:
+      'Jobs measured with tracing (SENTRY_TRACES_SAMPLE_RATE) show here under their queue, and so do the jobs requests put in.',
+    jobs: 'Jobs by class',
+    queue: 'Queue',
+    processed: 'Ran',
+    failed: 'Failed',
+    retries: 'Retries',
+    waitP95: 'Waited p95',
+    runP95: 'Ran p95',
+    published: 'Put in',
+    waitAverage: 'Waited on average',
+    runAverage: 'Ran on average',
+    chart: { processed: 'Jobs that ran', wait: 'Waiting before running', run: 'Running' },
   },
   timeline: {
     title: 'Timeline',

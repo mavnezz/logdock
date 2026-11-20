@@ -105,3 +105,18 @@ export function useSamples(
     enabled: computed(() => toValue(name) !== null && toValue(enabled)),
   })
 }
+
+export type QueueStats = Schemas['QueueStats']
+
+/** The queues over a range: put in, ran, failed, waited and ran for. */
+export function useQueues(params: MaybeRefOrGetter<Record<string, string>>) {
+  return useQuery({
+    queryKey: computed(() => ['performance', 'queues', toValue(params)]),
+    queryFn: () => {
+      const { from, to, project, environment } = toValue(params)
+      return unwrap(
+        api.GET('/api/v1/queues', { params: { query: { from, to, project, environment } } }),
+      )
+    },
+  })
+}

@@ -77,6 +77,8 @@ through Logdock's API:
 | the scheduler's entries say `scheduler` | |
 | requests, a failed job, a query, an outgoing request and a cache miss are measured; a slow request's p95 shows it | transactions, spans and rollups |
 | a request's trace holds the job it queued | traces across containers |
+| an N+1 query (8 of one statement in a row) becomes a performance issue | performance issues |
+| the queued job shows under its queue: put in, ran, failed, waited | queues |
 | scheduled tasks become monitors; a failing one turns *failing* and is mailed | check-ins and monitors |
 | Nginx's access log arrives through Vector with method, path and status; a 404 is a warning | Vector's Docker source and its parsing |
 | a line of Laravel's JSON log file arrives through Vector | the buffered mode |

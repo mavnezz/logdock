@@ -263,6 +263,8 @@ fn transaction_of(json: &Json) -> Transaction {
         service: string(json, "service"),
         host: string(json, "host"),
         container: string(json, "container"),
+        // Measured as it arrived; the stored transaction does not need it.
+        queue: None,
         spans: json
             .get("spans")
             .and_then(Json::as_array)
@@ -441,6 +443,7 @@ mod tests {
             service: Some("web".into()),
             host: Some("h1".into()),
             container: None,
+            queue: None,
             spans: vec![Span {
                 span_id: "s2".into(),
                 parent_span_id: Some("s1".into()),

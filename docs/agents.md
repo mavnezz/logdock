@@ -53,6 +53,8 @@ Logdock available in every project instead of the current one.
 | `get_event` | one error event by its event ID |
 | `get_trace` | everything of one trace ID across containers: transactions with spans, log entries, error events |
 | `performance` | requests, jobs, commands, SQL, outgoing requests or cache: count, failures, percentiles, total time |
+| `list_queues` | queues: put in, ran, failed, retries, how long jobs waited and ran |
+| `list_queues` | queues: put in, ran, failed, retries, how long jobs waited and ran |
 | `list_monitors` | scheduled tasks: health, last and next run |
 | `change_issue` | resolve, resolve in the next release, mute or reopen; only with *Read and triage* |
 
