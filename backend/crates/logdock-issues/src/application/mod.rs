@@ -20,7 +20,10 @@ use crate::domain::{IssueId, IssueStatus};
 pub use alerts::{NotifyPolicy, alert_mail};
 pub use ingest::{IngestEvent, IngestedEvent};
 use ports::{EventStore, IssueRepository};
-pub use queries::{EventsOfTrace, GetEvent, GetIssue, IssueDetail, ListEvents, ListIssues};
+pub use queries::{
+    EventsOfTrace, GetEvent, GetIssue, IssueDetail, ListEvents, ListIssues, SummarizeTags, TAG_SAMPLE,
+    TagSummary, TagValue,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IssueError {
@@ -58,6 +61,7 @@ pub struct IssueUseCases {
     pub list: ListIssues,
     pub get: GetIssue,
     pub events: ListEvents,
+    pub tags: SummarizeTags,
     pub event: GetEvent,
     pub trace: EventsOfTrace,
     pub change: ChangeStatus,
@@ -72,6 +76,7 @@ impl IssueUseCases {
             list: ListIssues { context: Arc::clone(&context) },
             get: GetIssue { context: Arc::clone(&context) },
             events: ListEvents { context: Arc::clone(&context) },
+            tags: SummarizeTags { context: Arc::clone(&context) },
             event: GetEvent { context: Arc::clone(&context) },
             trace: EventsOfTrace { context: Arc::clone(&context) },
             change: ChangeStatus { context: Arc::clone(&context) },

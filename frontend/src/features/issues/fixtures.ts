@@ -94,7 +94,12 @@ export function event(overrides: Partial<ErrorEvent> = {}): ErrorEvent {
       method: 'POST',
       url: 'https://orders.example.com/orders/42/pay',
       query: null,
-      headers: [['User-Agent', 'Mozilla/5.0']],
+      headers: [
+        ['User-Agent', 'Mozilla/5.0'],
+        ['Authorization', '[redacted]'],
+      ],
+      data: { order: 42, password: '[redacted]' },
+      cookies: ['laravel_session'],
     },
     user: { id: '17', email: null, username: null, ip_address: null },
     trace_id: '771a43a4192642f0b136d5159a501700',

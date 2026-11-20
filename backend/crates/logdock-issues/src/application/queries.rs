@@ -78,6 +78,64 @@ impl ListEvents {
     }
 }
 
+/// How often one value of a tag came in an issue's recent events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagValue {
+    pub value: String,
+    pub count: u32,
+}
+
+/// One tag across an issue's recent events, its values most frequent first.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TagSummary {
+    pub key: &'static str,
+    /// Events that had the tag at all.
+    pub total: u32,
+    pub values: Vec<TagValue>,
+}
+
+/// Reads one tag of an event.
+type TagOf = fn(&EventSummary) -> Option<&str>;
+
+/// How many recent events [`SummarizeTags`] looks at, as Sentry samples.
+pub const TAG_SAMPLE: u32 = 1000;
+
+/// Query: where an issue's recent events came from: release, route or job,
+/// service and host, each value with how often it came.
+#[derive(Clone)]
+pub struct SummarizeTags {
+    pub(crate) context: Arc<Context>,
+}
+
+impl SummarizeTags {
+    pub async fn execute(&self, id: IssueId) -> Result<Vec<TagSummary>, IssueError> {
+        let events = self.context.ports.events.list(id, None, TAG_SAMPLE).await?;
+        let tags: [(&'static str, TagOf); 4] = [
+            ("release", |e| e.release.as_deref()),
+            ("transaction", |e| e.transaction.as_deref()),
+            ("service", |e| e.service.as_deref()),
+            ("host", |e| e.host.as_deref()),
+        ];
+        Ok(tags
+            .into_iter()
+            .map(|(key, of)| {
+                let mut counts: Vec<TagValue> = Vec::new();
+                for value in events.iter().filter_map(of) {
+                    match counts.iter_mut().find(|c| c.value == value) {
+                        Some(known) => known.count += 1,
+                        None => counts.push(TagValue { value: value.to_owned(), count: 1 }),
+                    }
+                }
+                counts.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.value.cmp(&b.value)));
+                let total = counts.iter().map(|c| c.count).sum();
+                counts.truncate(10);
+                TagSummary { key, total, values: counts }
+            })
+            .filter(|summary| summary.total > 0)
+            .collect())
+    }
+}
+
 /// Query: one event by the SDK's event ID.
 #[derive(Clone)]
 pub struct GetEvent {

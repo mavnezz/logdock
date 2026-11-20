@@ -11,20 +11,20 @@ import { Alert } from '@/shared/ui/alert'
 import { buttonVariants } from '@/shared/ui/button'
 import { LevelBadge } from '@/shared/ui/level'
 import { EmptyState } from '@/shared/ui/page'
+import { buildTimeline, RequestTimeline } from '@/shared/trace'
 
-import { useTrace, waterfall } from './api'
+import { useTrace } from './api'
 
 const props = defineProps<{ id: string }>()
 const { t } = useI18n()
 const names = useProjectNames()
 const trace = useTrace(() => props.id)
-const view = computed(() => waterfall(trace.data.value?.transactions ?? []))
+const view = computed(() => buildTimeline(trace.data.value?.transactions ?? []))
 const first = computed(() => trace.data.value?.transactions[0])
 const empty = computed(() => {
   const data = trace.data.value
   return data && data.transactions.length + data.logs.length + data.events.length === 0
 })
-const percent = (micros: number) => `${(micros / view.value.total) * 100}%`
 </script>
 
 <template>
@@ -50,38 +50,9 @@ const percent = (micros: number) => `${(micros / view.value.total) * 100}%`
     </p>
     <EmptyState v-else-if="empty" :title="t('traces.empty')" :description="t('traces.emptyHint')" />
     <template v-else-if="trace.data.value">
-      <section v-if="view.rows.length" class="grid gap-2">
+      <section v-if="view.roots.length" class="grid gap-2">
         <h2 class="font-medium">{{ t('traces.waterfall') }}</h2>
-        <ol class="divide-y rounded-lg border text-xs" :aria-label="t('traces.waterfall')">
-          <li
-            v-for="row in view.rows"
-            :key="row.key"
-            class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_4.5rem] items-center gap-3 px-3 py-1"
-            :class="row.transaction && 'bg-muted/40 font-medium'"
-          >
-            <span
-              class="flex min-w-0 items-baseline gap-2"
-              :style="{ paddingLeft: `${row.depth * 0.75}rem` }"
-            >
-              <span class="shrink-0 text-muted-foreground">{{ row.op }}</span>
-              <span class="truncate font-mono" :title="row.label">{{ row.label }}</span>
-            </span>
-            <span class="relative h-3" aria-hidden="true">
-              <span
-                class="absolute inset-y-0 rounded-sm"
-                :class="
-                  row.failed
-                    ? 'bg-level-error'
-                    : row.transaction
-                      ? 'bg-level-info'
-                      : 'bg-muted-foreground/50'
-                "
-                :style="{ left: percent(row.offset), width: `max(2px, ${percent(row.duration)})` }"
-              />
-            </span>
-            <span class="text-right tabular-nums">{{ formatDuration(row.duration / 1000) }}</span>
-          </li>
-        </ol>
+        <RequestTimeline :transactions="trace.data.value.transactions" />
       </section>
 
       <section v-if="trace.data.value.events.length" class="grid gap-2">

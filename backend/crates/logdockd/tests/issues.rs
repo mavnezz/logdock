@@ -154,15 +154,34 @@ async fn errors_become_issues_with_their_events_and_trace() {
     assert_eq!(latest["breadcrumbs"][0]["category"], "db.sql.query");
     assert_eq!(latest["contexts"]["runtime"]["version"], "8.4.15");
 
-    // What must not be kept: cookies, the body, credentials in headers.
+    // Kept as Sentry keeps it: every header, the body, the cookies' names;
+    // never a credential, a cookie's value, a password or a card number.
     let kept = latest.to_string();
-    for secret in ["laravel_session=abc", "hunter2", "4111111111111111", "secret-token"] {
+    for secret in ["abc", "hunter2", "4111111111111111", "secret-token"] {
         assert!(!kept.contains(secret), "{secret} was kept: {kept}");
     }
-    let headers: Vec<&str> =
-        latest["request"]["headers"].as_array().unwrap().iter().map(|h| h[0].as_str().unwrap()).collect();
-    assert!(headers.contains(&"User-Agent"), "{headers:?}");
-    assert!(!headers.contains(&"Cookie"));
+    let request = &latest["request"];
+    let header = |name: &str| {
+        request["headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|h| h[0] == name)
+            .map(|h| h[1].as_str().unwrap().to_owned())
+    };
+    assert_eq!(header("User-Agent").as_deref(), Some("Mozilla/5.0"));
+    assert_eq!(header("Cookie").as_deref(), Some("[redacted]"));
+    assert_eq!(header("Authorization").as_deref(), Some("[redacted]"));
+    assert_eq!(request["cookies"], json!(["laravel_session"]));
+    assert_eq!(request["data"]["password"], "[redacted]");
+    assert!(request["data"]["card"].as_str().unwrap().contains("redacted"), "{request}");
+
+    // Where its events came from, value by value.
+    let tags = admin.get(&format!("/api/v1/issues/{id}/tags")).await.json();
+    let service = tags.as_array().unwrap().iter().find(|t| t["key"] == "service").unwrap();
+    assert_eq!(service["values"], json!([{"value": "web", "count": 2}]), "{tags}");
+    let release = tags.as_array().unwrap().iter().find(|t| t["key"] == "release").unwrap();
+    assert_eq!(release["total"], 2);
 
     let events = admin.get(&format!("/api/v1/issues/{id}/events")).await.json();
     assert_eq!(events.as_array().unwrap().len(), 2);

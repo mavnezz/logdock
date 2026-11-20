@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, RotateCcw, Trash2 } from 'lucide-vue-next'
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
@@ -14,6 +14,7 @@ import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
+import { RequestTimeline } from '@/shared/trace'
 
 import {
   type ChangeIssue,
@@ -24,6 +25,7 @@ import {
   useEvent,
   useIssue,
   useIssueEvents,
+  useIssueTags,
   useTrace,
 } from './api'
 import EventView from './EventView.vue'
@@ -54,6 +56,16 @@ const event = computed(
       ErrorEvent | null | undefined,
 )
 const trace = useTrace(computed(() => event.value?.trace_id ?? null))
+const tags = useIssueTags(id)
+
+// Newer and older events than the one shown, from those loaded.
+const shownId = computed(() => chosen.value ?? detail.data.value?.latest?.event_id ?? null)
+const position = computed(() => eventItems.value.findIndex((e) => e.event_id === shownId.value))
+function step(by: number): void {
+  const next = eventItems.value[position.value + by]
+  if (next) chosen.value = next.event_id
+  else if (by > 0 && events.hasNextPage.value) void events.fetchNextPage()
+}
 const others = computed(() =>
   (trace.data.value?.events ?? []).filter((e) => e.event_id !== event.value?.event_id),
 )
@@ -208,15 +220,46 @@ const statusText = computed(() => {
             <h2 class="font-medium">
               {{ chosen === null ? t('issues.latestEvent') : t('issues.chosenEvent') }}
             </h2>
-            <Button v-if="chosen !== null" size="sm" variant="ghost" @click="chosen = null">{{
-              t('issues.showLatest')
-            }}</Button>
+            <div class="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="position <= 0"
+                :aria-label="t('issues.newerEvent')"
+                @click="step(-1)"
+                ><ChevronLeft />{{ t('issues.newer') }}</Button
+              >
+              <Button
+                size="sm"
+                variant="outline"
+                :disabled="
+                  position < 0 || (position >= eventItems.length - 1 && !events.hasNextPage.value)
+                "
+                :aria-label="t('issues.olderEvent')"
+                @click="step(1)"
+                >{{ t('issues.older') }}<ChevronRight
+              /></Button>
+              <Button v-if="chosen !== null" size="sm" variant="ghost" @click="chosen = null">{{
+                t('issues.showLatest')
+              }}</Button>
+            </div>
           </div>
           <Alert v-if="picked.error.value" variant="destructive">{{
             problemMessage(picked.error.value)
           }}</Alert>
           <EventView v-if="event" :event="event" />
           <p v-else class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+
+          <section v-if="event?.trace_id && trace.data.value" class="grid gap-2">
+            <h3 class="text-sm font-medium">{{ t('issues.flow') }}</h3>
+            <RequestTimeline
+              v-if="trace.data.value.transactions.length"
+              :transactions="trace.data.value.transactions"
+              :focus-span="event.span_id"
+              :focus-name="event.transaction"
+            />
+            <p v-else class="text-sm text-muted-foreground">{{ t('issues.flowMissing') }}</p>
+          </section>
 
           <section v-if="event?.trace_id && trace.data.value" class="grid gap-2">
             <h3 class="text-sm font-medium">{{ t('issues.sameTrace') }}</h3>
@@ -254,6 +297,27 @@ const statusText = computed(() => {
         </section>
 
         <aside class="grid content-start gap-6">
+          <section v-if="tags.data.value?.length" class="grid gap-3">
+            <h2 class="text-sm font-medium">{{ t('issues.origin') }}</h2>
+            <div v-for="tag in tags.data.value" :key="tag.key" class="grid gap-1">
+              <h3 class="text-xs text-muted-foreground">{{ t(`issues.tagKeys.${tag.key}`) }}</h3>
+              <ul class="grid gap-1 text-xs" :aria-label="t(`issues.tagKeys.${tag.key}`)">
+                <li v-for="value in tag.values" :key="value.value" class="relative">
+                  <span
+                    class="absolute inset-y-0 left-0 rounded-sm bg-muted"
+                    :style="{ width: `${(value.count / tag.total) * 100}%` }"
+                    aria-hidden="true"
+                  />
+                  <span class="relative flex justify-between gap-2 px-1.5 py-0.5">
+                    <span class="truncate font-mono" :title="value.value">{{ value.value }}</span>
+                    <span class="shrink-0 tabular-nums text-muted-foreground"
+                      >{{ Math.round((value.count / tag.total) * 100) }} %</span
+                    >
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </section>
           <section class="grid gap-2">
             <h2 class="text-sm font-medium">{{ t('issues.recentEvents') }}</h2>
             <ol class="divide-y rounded-md border text-xs">

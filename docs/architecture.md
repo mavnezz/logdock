@@ -270,7 +270,8 @@ An event is stored redacted (6) and compressed. It holds:
 - the message, tags and contexts;
 - the breadcrumbs. By default the SDK records logs, SQL queries (without bindings), cache, queue, HTTP client and
   notifications;
-- the request: method, URL and allowed headers, but no body by default;
+- the request: method, URL, headers, body and the cookies' names, as Sentry shows them, with secret values blanked
+  (section 6);
 - the user, only when the app sends personal data.
 
 **Grouping.** Logdock has its own, documented rules. They follow the order Sentry's documentation describes:
@@ -441,8 +442,8 @@ change `logdock-infra` only.
 
 ## 6. Privacy and Redaction
 
-Passwords, tokens, authorization headers and full request bodies must not be stored. Messages and exception texts can
-contain them too. Logdock protects against this at three levels:
+Passwords, tokens, credentials in headers and cookies' values must not be stored. Messages, exception texts and request
+bodies can contain them too. Logdock protects against this at three levels:
 
 1. **In the app.** The SDK's defaults stay as they are: `send_default_pii=false`, and SQL bindings are off in
    breadcrumbs and spans.
@@ -453,8 +454,10 @@ contain them too. Logdock protects against this at three levels:
      `csrf`, `private_key`, `credit_card`, … Their values are replaced.
    - Free text (messages, exception values, breadcrumbs, URLs) is checked for patterns: `Bearer …`, JWTs (`eyJ…`),
      `user:password@` in URLs, query parameters with denied names, and card numbers that pass the Luhn check.
-   - Request bodies are not stored by default. Headers are kept only from an allow list (`User-Agent`, `Content-Type`,
-     `Accept`, `X-Request-Id`, …). Lengths are capped (3.5).
+   - A request is kept as Sentry shows it, so an error can be understood: every header, but `Authorization`,
+     `Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-CSRF-Token`, `X-XSRF-Token`, `X-Api-Key` and `X-Auth-Token` read
+     `[redacted]` whatever the rules say; the body, redacted by the rules above and left out above 16 KiB; the
+     cookies' names, never their values; not the server's environment. Lengths are capped (3.5).
 3. **Per project, optionally.** Only attributes on an allow list are kept.
 
 Every replacement is marked (`[redacted:password]`) and counted per entry, so missing values are visible as such. The

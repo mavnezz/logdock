@@ -775,6 +775,45 @@
         ]
       }
     },
+    "/api/v1/issues/{id}/tags": {
+      "get": {
+        "tags": [
+          "issues"
+        ],
+        "summary": "Where an issue's recent events (the last 1,000) came from: release,\nroute or job, service and host, each value with how often.",
+        "operationId": "issue_tags",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagSummaryDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/api/v1/logs": {
       "get": {
         "tags": [
@@ -4129,9 +4168,20 @@
       "RequestInfo": {
         "type": "object",
         "required": [
-          "headers"
+          "headers",
+          "cookies"
         ],
         "properties": {
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The cookies' names; their values are never kept."
+          },
+          "data": {
+            "description": "The body (form fields, JSON), redacted; a large one is left out."
+          },
           "headers": {
             "type": "array",
             "items": {
@@ -4145,7 +4195,8 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "description": "All headers; secret ones (Authorization, Cookie, CSRF tokens) and\nthose the redaction rules match read `[redacted]`."
           },
           "method": {
             "type": [
@@ -4611,6 +4662,50 @@
             "description": "The address SDKs and forwarders send to."
           },
           "version": {
+            "type": "string"
+          }
+        }
+      },
+      "TagSummaryDto": {
+        "type": "object",
+        "required": [
+          "key",
+          "total",
+          "values"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "`release`, `transaction`, `service` or `host`."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Events that had the tag.",
+            "minimum": 0
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagValueDto"
+            },
+            "description": "The ten most frequent values."
+          }
+        }
+      },
+      "TagValueDto": {
+        "type": "object",
+        "required": [
+          "value",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "value": {
             "type": "string"
           }
         }

@@ -195,6 +195,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/issues/{id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where an issue's recent events (the last 1,000) came from: release,
+         *     route or job, service and host, each value with how often.
+         */
+        get: operations["issue_tags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs": {
         parameters: {
             query?: never;
@@ -1127,6 +1147,14 @@ export interface components {
             release: string;
         };
         RequestInfo: {
+            /** @description The cookies' names; their values are never kept. */
+            cookies: string[];
+            /** @description The body (form fields, JSON), redacted; a large one is left out. */
+            data?: unknown;
+            /**
+             * @description All headers; secret ones (Authorization, Cookie, CSRF tokens) and
+             *     those the redaction rules match read `[redacted]`.
+             */
             headers: [
                 string,
                 string
@@ -1276,6 +1304,22 @@ export interface components {
             /** @description The address SDKs and forwarders send to. */
             public_url?: string | null;
             version: string;
+        };
+        TagSummaryDto: {
+            /** @description `release`, `transaction`, `service` or `host`. */
+            key: string;
+            /**
+             * Format: int32
+             * @description Events that had the tag.
+             */
+            total: number;
+            /** @description The ten most frequent values. */
+            values: components["schemas"]["TagValueDto"][];
+        };
+        TagValueDto: {
+            /** Format: int32 */
+            count: number;
+            value: string;
         };
         TestMailSent: {
             /** @description How many addresses it went to. */
@@ -1854,6 +1898,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventListItem"][];
+                };
+            };
+        };
+    };
+    issue_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagSummaryDto"][];
                 };
             };
         };

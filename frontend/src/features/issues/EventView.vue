@@ -132,6 +132,23 @@ function show(value: unknown): string {
           </tr>
         </tbody>
       </table>
+      <template v-if="event.request.data !== null && event.request.data !== undefined">
+        <h4 class="text-xs font-medium text-muted-foreground">{{ t('issues.body') }}</h4>
+        <pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs">{{
+          typeof event.request.data === 'string'
+            ? event.request.data
+            : JSON.stringify(event.request.data, null, 2)
+        }}</pre>
+      </template>
+      <p v-if="event.request.cookies.length" class="flex flex-wrap items-center gap-1.5 text-xs">
+        <span class="text-muted-foreground">{{ t('issues.cookies') }}</span>
+        <code
+          v-for="name in event.request.cookies"
+          :key="name"
+          class="rounded bg-muted px-1.5 py-0.5 font-mono"
+          >{{ name }}</code
+        >
+      </p>
     </section>
 
     <section v-if="event.breadcrumbs.length" class="grid gap-2">

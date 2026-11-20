@@ -109,6 +109,15 @@ export function useTrace(id: MaybeRefOrGetter<string | null>) {
   })
 }
 
+/** Where an issue's recent events came from: release, route, service, host. */
+export function useIssueTags(id: MaybeRefOrGetter<number>) {
+  return useQuery({
+    queryKey: computed(() => ['issues', 'detail', toValue(id), 'tags']),
+    queryFn: () =>
+      unwrap(api.GET('/api/v1/issues/{id}/tags', { params: { path: { id: toValue(id) } } })),
+  })
+}
+
 /** Resolving, muting and reopening refresh every issue list and page. */
 export function useChangeIssue(id: MaybeRefOrGetter<number>) {
   const queryClient = useQueryClient()

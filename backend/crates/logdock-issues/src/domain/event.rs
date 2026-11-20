@@ -80,6 +80,10 @@ pub struct RequestInfo {
     pub url: Option<String>,
     pub query: Option<String>,
     pub headers: Vec<(String, String)>,
+    /// The body as the SDK sent it (form fields, JSON), redacted.
+    pub data: Option<Value>,
+    /// The cookies' names; their values are never kept.
+    pub cookies: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -123,18 +127,24 @@ pub struct ErrorEvent {
     pub payload: Value,
 }
 
-/// Request headers that are kept; all others are dropped before anything
-/// is stored (docs/architecture.md, 6).
-const KEPT_HEADERS: &[&str] = &[
-    "user-agent",
-    "content-type",
-    "accept",
-    "accept-language",
-    "referer",
-    "host",
-    "x-request-id",
-    "x-forwarded-for",
+/// Request headers whose values are never kept, whatever the project's
+/// rules say; the redaction rules apply to the others.
+const SECRET_HEADERS: &[&str] = &[
+    "authorization",
+    "proxy-authorization",
+    "cookie",
+    "set-cookie",
+    "x-csrf-token",
+    "x-xsrf-token",
+    "x-api-key",
+    "x-auth-token",
+    "php-auth-pw",
 ];
+
+/// A request body larger than this, as JSON, is left out.
+pub const MAX_BODY_BYTES: usize = 16 * 1024;
+
+const REDACTED: &str = "[redacted]";
 
 /// How much of an event is kept.
 pub const MAX_BREADCRUMBS: usize = 100;
@@ -222,20 +232,28 @@ fn joined(value: &Value) -> Option<String> {
 }
 
 impl ErrorEvent {
-    /// Prepares a payload to be kept: the request's body and cookies are
-    /// dropped, its headers limited to a few, everything redacted by the
-    /// rules, breadcrumbs and frames limited. Returns how many values
-    /// redaction replaced.
+    /// Prepares a payload to be kept: the request's secret headers and its
+    /// cookies' values are blanked, a large body left out, the server's
+    /// environment dropped, everything redacted by the rules, breadcrumbs
+    /// and frames limited. Returns how many values redaction replaced.
     pub fn prepare(payload: Value, rules: &RedactionRules) -> (Value, u32) {
         let Value::Object(mut fields) = payload else { return (Value::Object(Vec::new()), 0) };
         for (key, value) in &mut fields {
             match key.as_str() {
                 "request" => {
                     if let Value::Object(request) = value {
-                        request.retain(|(k, _)| !matches!(k.as_str(), "data" | "cookies" | "env"));
+                        request.retain(|(k, _)| k != "env");
                         for (k, v) in request.iter_mut() {
-                            if k == "headers" {
-                                *v = keep_headers(std::mem::replace(v, Value::Null));
+                            match k.as_str() {
+                                "headers" => blank_secret_headers(v),
+                                "cookies" => *v = cookie_names(v),
+                                "data" if json_size(v) > MAX_BODY_BYTES => {
+                                    *v = Value::String(format!(
+                                        "[left out: about {} KB]",
+                                        json_size(v) / 1024
+                                    ));
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -258,8 +276,20 @@ impl ErrorEvent {
                 _ => {}
             }
         }
+        // The rules blank `cookies` whole; its names, valueless, come back.
+        let cookies = fields
+            .iter()
+            .find(|(k, _)| k == "request")
+            .and_then(|(_, request)| request.as_object())
+            .and_then(|request| request.iter().find(|(k, _)| k == "cookies").map(|(_, v)| v.clone()));
         let mut redactor = Redactor::new(rules);
-        let redacted = redactor.value(Value::Object(fields));
+        let mut redacted = redactor.value(Value::Object(fields));
+        if let (Some(cookies), Value::Object(fields)) = (cookies, &mut redacted)
+            && let Some((_, Value::Object(request))) = fields.iter_mut().find(|(k, _)| k == "request")
+            && let Some((_, value)) = request.iter_mut().find(|(k, _)| k == "cookies")
+        {
+            *value = cookies;
+        }
         (redacted, redactor.count())
     }
 
@@ -306,6 +336,11 @@ impl ErrorEvent {
             url: text(request.get("url")),
             query: text(request.get("query_string")),
             headers: pairs(request.get("headers")),
+            data: request.get("data").filter(|d| !matches!(d, Value::Null)).cloned(),
+            cookies: match request.get("cookies") {
+                Some(Value::Object(fields)) => fields.iter().map(|(k, _)| k.clone()).collect(),
+                _ => Vec::new(),
+            },
         });
         let user =
             p.get("user").filter(|u| u.as_object().is_some_and(|f| !f.is_empty())).map(|user| UserInfo {
@@ -369,19 +404,57 @@ fn cut(mut text: String, max: usize) -> String {
     text
 }
 
-fn keep_headers(headers: Value) -> Value {
-    let keep = |name: &str| KEPT_HEADERS.contains(&name.to_ascii_lowercase().as_str());
+fn is_secret_header(name: &str) -> bool {
+    SECRET_HEADERS.contains(&name.to_ascii_lowercase().as_str())
+}
+
+/// Blanks the values of [`SECRET_HEADERS`], in both shapes SDKs send.
+fn blank_secret_headers(headers: &mut Value) {
     match headers {
-        Value::Object(fields) => Value::Object(fields.into_iter().filter(|(k, _)| keep(k)).collect()),
-        Value::Array(items) => Value::Array(
-            items
-                .into_iter()
-                .filter(|pair| {
-                    pair.as_array().and_then(|p| p.first()).and_then(Value::as_str).is_some_and(keep)
-                })
-                .collect(),
-        ),
-        _ => Value::Null,
+        Value::Object(fields) => {
+            for (name, value) in fields.iter_mut() {
+                if is_secret_header(name) {
+                    *value = Value::String(REDACTED.into());
+                }
+            }
+        }
+        Value::Array(items) => {
+            for pair in items.iter_mut() {
+                if let Value::Array(pair) = pair
+                    && pair.first().and_then(Value::as_str).is_some_and(is_secret_header)
+                    && let Some(value) = pair.get_mut(1)
+                {
+                    *value = Value::String(REDACTED.into());
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The cookies' names, each with a blank value; a cookie header string is
+/// split into its names.
+fn cookie_names(cookies: &Value) -> Value {
+    let names: Vec<String> = match cookies {
+        Value::Object(fields) => fields.iter().map(|(k, _)| k.clone()).collect(),
+        Value::String(header) => header
+            .split(';')
+            .filter_map(|pair| pair.split_once('=').map(|(name, _)| name.trim().to_owned()))
+            .filter(|name| !name.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    };
+    Value::Object(names.into_iter().map(|name| (name, Value::String(REDACTED.into()))).collect())
+}
+
+/// About how many bytes `value` takes as JSON.
+fn json_size(value: &Value) -> usize {
+    match value {
+        Value::Null | Value::Bool(_) => 5,
+        Value::Int(_) | Value::Float(_) => 12,
+        Value::String(text) => text.len() + 2,
+        Value::Array(items) => items.iter().map(json_size).sum::<usize>() + items.len() + 2,
+        Value::Object(fields) => fields.iter().map(|(k, v)| k.len() + 4 + json_size(v)).sum::<usize>() + 2,
     }
 }
 
@@ -582,10 +655,19 @@ pub(crate) mod tests {
         assert_eq!(event.user.as_ref().and_then(|u| u.id.as_deref()), Some("7"));
 
         let request = event.request.as_ref().unwrap();
-        assert_eq!(request.headers, [("User-Agent".to_owned(), "curl".to_owned())], "only kept headers");
+        let header = |name: &str| request.headers.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+        assert_eq!(header("User-Agent"), Some("curl"));
+        assert_eq!(header("Authorization"), Some("[redacted]"), "secret headers are blanked");
         assert_eq!(request.query.as_deref(), Some("token=[redacted]"));
-        assert!(event.payload.pointer(&["request", "data"]).is_none(), "no bodies");
-        assert!(event.payload.pointer(&["request", "cookies"]).is_none());
+        assert_eq!(request.cookies, ["session"], "a cookie's name, not its value");
+        assert_eq!(event.payload.pointer(&["request", "cookies", "session"]), Some(&s("[redacted]")));
+        let card = request
+            .data
+            .as_ref()
+            .and_then(|d| d.as_object())
+            .and_then(|d| d.first())
+            .map(|(k, _)| k.as_str());
+        assert_eq!(card, Some("card"), "the body is kept, redacted by the rules");
         assert!(redactions >= 1);
     }
 
@@ -659,7 +741,30 @@ pub(crate) mod tests {
         let payload = object(vec![("request", object(vec![("headers", headers)]))]);
         let (prepared, _) = ErrorEvent::prepare(payload, &RedactionRules::default());
         let request = ErrorEvent::from_payload(prepared, None).request.unwrap();
-        assert_eq!(request.headers, [("Accept".to_owned(), "text/html, application/json".to_owned())]);
+        assert_eq!(
+            request.headers,
+            [
+                ("Accept".to_owned(), "text/html, application/json".to_owned()),
+                ("Cookie".to_owned(), "[redacted]".to_owned())
+            ]
+        );
+    }
+
+    #[test]
+    fn leaves_out_a_large_body_and_keeps_cookie_names_from_a_header_string() {
+        let payload = object(vec![(
+            "request",
+            object(vec![
+                ("data", object(vec![("upload", s(&"x".repeat(MAX_BODY_BYTES + 1)))])),
+                ("cookies", s("laravel_session=abc; XSRF-TOKEN=def")),
+                ("env", object(vec![("APP_KEY", s("base64:secret"))])),
+            ]),
+        )]);
+        let (prepared, _) = ErrorEvent::prepare(payload, &RedactionRules::default());
+        assert!(prepared.pointer(&["request", "env"]).is_none(), "the server's environment goes");
+        let request = ErrorEvent::from_payload(prepared, None).request.unwrap();
+        assert_eq!(request.data, Some(s("[left out: about 16 KB]")));
+        assert_eq!(request.cookies, ["laravel_session", "XSRF-TOKEN"]);
     }
 
     #[test]

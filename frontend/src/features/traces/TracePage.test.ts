@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mountWith, stubApi } from '@/shared/testing'
 import { project } from '@/shared/testing/fixtures'
 
-import { type TraceTransaction, waterfall } from './api'
+import type { TraceTransaction } from './api'
 import TracePage from './TracePage.vue'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -62,32 +62,6 @@ function transaction(overrides: Partial<TraceTransaction> = {}): TraceTransactio
 }
 
 describe('a trace', () => {
-  it('lays transactions and spans out under their parents', () => {
-    const job = transaction({
-      span_id: 'job',
-      parent_span_id: 'publish',
-      kind: 'job',
-      name: 'App\\Jobs\\ChargeOrder',
-      op: 'queue.process',
-      failed: true,
-      start: '2026-11-19T01:08:19.500000Z',
-      duration_us: 30_000,
-      spans: [],
-    })
-    const { rows, total } = waterfall([transaction(), job])
-    expect(total).toBe(530_000)
-    expect(rows.map((r) => [r.depth, r.label])).toEqual([
-      [0, 'GET /scenario/job'],
-      [1, 'Closure'],
-      [2, 'App\\Jobs\\ChargeOrder'],
-      [1, 'select 1'],
-      [0, 'App\\Jobs\\ChargeOrder'],
-    ])
-    expect(rows[4]!.offset).toBe(500_000)
-    expect(rows[4]!.failed).toBe(true)
-    expect(waterfall([]).rows).toEqual([])
-  })
-
   it('shows the waterfall, the errors and the log entries of a trace', async () => {
     stubApi({
       'GET /api/v1/traces/abc': () => ({

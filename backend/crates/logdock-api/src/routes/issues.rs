@@ -26,6 +26,7 @@ pub(crate) fn routes() -> OpenApiRouter<ApiState> {
         .routes(routes!(list_issues))
         .routes(routes!(get_issue, change_issue, delete_issue))
         .routes(routes!(issue_events))
+        .routes(routes!(issue_tags))
         .routes(routes!(get_event))
 }
 
@@ -216,7 +217,14 @@ pub struct RequestInfo {
     pub method: Option<String>,
     pub url: Option<String>,
     pub query: Option<String>,
+    /// All headers; secret ones (Authorization, Cookie, CSRF tokens) and
+    /// those the redaction rules match read `[redacted]`.
     pub headers: Vec<(String, String)>,
+    /// The body (form fields, JSON), redacted; a large one is left out.
+    #[schema(value_type = Option<serde_json::Value>)]
+    pub data: Option<serde_json::Value>,
+    /// The cookies' names; their values are never kept.
+    pub cookies: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -305,6 +313,8 @@ impl From<&ErrorEvent> for Event {
                 url: r.url.clone(),
                 query: r.query.clone(),
                 headers: r.headers.clone(),
+                data: r.data.as_ref().map(json),
+                cookies: r.cookies.clone(),
             }),
             user: e.user.as_ref().map(|u| UserInfo {
                 id: u.id.clone(),
@@ -534,6 +544,54 @@ async fn issue_events(
     };
     let events = state.issues.events.execute(IssueId::new(id), before, page.limit.unwrap_or(20)).await?;
     Ok(Json(events.iter().map(EventListItem::from).collect()))
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TagValueDto {
+    pub value: String,
+    pub count: u32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TagSummaryDto {
+    /// `release`, `transaction`, `service` or `host`.
+    pub key: String,
+    /// Events that had the tag.
+    pub total: u32,
+    /// The ten most frequent values.
+    pub values: Vec<TagValueDto>,
+}
+
+/// Where an issue's recent events (the last 1,000) came from: release,
+/// route or job, service and host, each value with how often.
+#[utoipa::path(
+    get,
+    path = "/issues/{id}/tags",
+    tag = "issues",
+    security(("session" = [])),
+    params(("id" = i64, Path)),
+    responses((status = OK, body = Vec<TagSummaryDto>))
+)]
+async fn issue_tags(
+    auth: Auth,
+    State(state): State<ApiState>,
+    Path(id): Path<i64>,
+) -> Result<Json<Vec<TagSummaryDto>>, ApiError> {
+    auth.require(Permission::ReadData)?;
+    let tags = state.issues.tags.execute(IssueId::new(id)).await?;
+    Ok(Json(
+        tags.into_iter()
+            .map(|tag| TagSummaryDto {
+                key: tag.key.to_owned(),
+                total: tag.total,
+                values: tag
+                    .values
+                    .into_iter()
+                    .map(|v| TagValueDto { value: v.value, count: v.count })
+                    .collect(),
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Debug, Serialize, ToSchema)]

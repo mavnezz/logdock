@@ -192,7 +192,11 @@ services:
 - **What is measured** per request: the request itself, its SQL statements
   (with their values replaced), outgoing HTTP requests by host, and cache
   operations; a queued job continues the trace of the request that queued it.
-- **What is not kept** from an error event: the request body, cookies and
-  environment, headers other than a few harmless ones, and the code around the
-  lines of libraries (it makes up most of an event's size). Personal data is
-  only sent with `SENTRY_SEND_DEFAULT_PII=true`.
+- **What an error keeps of its request**, as Sentry shows it: every header,
+  with credentials (`Authorization`, `Cookie`, CSRF tokens) blanked; the body,
+  with passwords, tokens and card numbers blanked, and left out above 16 KiB;
+  the cookies' names, never their values. Not kept: the server's environment
+  and the code around the lines of libraries (most of an event's size).
+- **The user** (ID, e-mail, IP address) comes with
+  `SENTRY_SEND_DEFAULT_PII=true` only; the issue's page shows it then. Without
+  it the SDK also leaves out the client's IP address and the cookies.

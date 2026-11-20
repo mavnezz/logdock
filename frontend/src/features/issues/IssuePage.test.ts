@@ -58,8 +58,47 @@ function api(status: string = 'unresolved') {
       received: '',
       event: event({ event_id: 'a1', release: '1.0.0', server_name: 'orders-horizon-1' }),
     }),
+    'GET /api/v1/issues/5/tags': () => [
+      { key: 'service', total: 3, values: [{ value: 'web', count: 3 }] },
+      {
+        key: 'release',
+        total: 3,
+        values: [
+          { value: '4f2c1e9', count: 2 },
+          { value: '1.0.0', count: 1 },
+        ],
+      },
+    ],
     'GET /api/v1/traces/771a43a4192642f0b136d5159a501700': () => ({
       trace_id: '771a43a4192642f0b136d5159a501700',
+      transactions: [
+        {
+          project_id: 3,
+          environment_id: 1,
+          span_id: 'root',
+          parent_span_id: null,
+          kind: 'request',
+          name: 'POST /orders/{order}/pay',
+          op: 'http.server',
+          status: 'internal_error',
+          http_status: 500,
+          failed: true,
+          start: '2026-11-18T09:15:00.000000Z',
+          duration_us: 120_000,
+          service: 'web',
+          host: 'docker-host-01',
+          spans: [0, 1, 2].map((n) => ({
+            span_id: `q${n}`,
+            parent_span_id: 'root',
+            op: 'db.sql.query',
+            description: 'select * from items where order_id = ?',
+            start: `2026-11-18T09:15:00.0${n}0000Z`,
+            duration_us: 2_000,
+            status: null,
+            data: { 'db.system': 'mysql' },
+          })),
+        },
+      ],
       logs: [
         {
           id: '1-1',
@@ -108,6 +147,18 @@ describe('an issue’s page', () => {
     expect(text).toContain('Charging order 42')
     expect(text).toContain('3 events')
     expect(wrapper.findAll('rect[data-bar]').length).toBe(84)
+
+    // The request's flow: the repeated query as one row, and where the time went.
+    expect(text).toContain('What the request did')
+    expect(text).toContain('3×')
+    expect(text).toContain('Database')
+    // Where its events came from.
+    expect(text).toContain('Where it comes from')
+    expect(text).toContain('67 %')
+    // The request as Sentry keeps it: every header, the body, the cookies' names.
+    expect(text).toContain('[redacted]')
+    expect(text).toContain('"order": 42')
+    expect(text).toContain('laravel_session')
 
     // Library frames are hidden until asked for.
     expect(text).not.toContain('GuzzleHttp\\Client::send')
