@@ -15,7 +15,7 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::auth::Auth;
+use crate::auth::{Auth, TokenWrites};
 use crate::dto::{ids, json, optional_time, time};
 use crate::error::{ApiError, Problem};
 use crate::extract::{ApiJson, ApiPath as Path, ApiQuery, Client};
@@ -421,12 +421,13 @@ pub struct ChangeIssueRequest {
     path = "/issues/{id}",
     tag = "issues",
     security(("session" = [])),
+    security(("token" = [])),
     params(("id" = i64, Path)),
     request_body = ChangeIssueRequest,
     responses((status = OK, body = Issue), (status = NOT_FOUND, body = Problem))
 )]
 async fn change_issue(
-    auth: Auth,
+    auth: TokenWrites,
     State(state): State<ApiState>,
     Client(client): Client,
     Path(id): Path<i64>,

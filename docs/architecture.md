@@ -469,6 +469,9 @@ Patterns in free text catch only what they describe. They lower the risk; they d
 - **Accounts.** Logdock has its own accounts:
   - passwords hashed with argon2;
   - a session cookie (`HttpOnly`, `Secure`, `SameSite=Strict`) and a CSRF token;
+  - API tokens for programs and for MCP ([agents.md](agents.md)): made in a session, stored as SHA-256, acting for
+    their account but narrowed to reading and, if chosen, triaging issues; they change nothing else, so they need no
+    CSRF token;
   - throttling of failed sign-ins;
   - [Later] two-factor sign-in with TOTP, as in zendiloOS.
 - **First start.** `logdockd` writes a one-time setup code to its log (or takes `LOGDOCK_SETUP_CODE`). Whoever has

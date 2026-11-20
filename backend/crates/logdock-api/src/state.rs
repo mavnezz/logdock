@@ -28,6 +28,11 @@ pub struct ApiConfig {
 }
 
 impl ApiConfig {
+    /// `path` under the address the interface is reached at.
+    pub fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.public_url.as_deref().unwrap_or("http://localhost:8080"))
+    }
+
     /// The DSN an SDK is configured with for `key` of `project`.
     pub fn dsn(&self, key: &str, project: i64) -> String {
         let url = self.public_url.as_deref().unwrap_or("http://localhost:8080");

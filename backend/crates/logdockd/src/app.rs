@@ -21,8 +21,8 @@ use logdock_infra::monitors::{BundledTimeZones, ProjectNoticeTargets, SqliteMoni
 use logdock_infra::performance::{SegmentTransactions, SqliteRollups};
 use logdock_infra::segments::{Segments, SqliteHousekeeping};
 use logdock_infra::sqlite::{
-    Database, RandomKeys, SqliteAccounts, SqliteAudit, SqliteIngestCounter, SqliteKeys, SqliteProjects,
-    SqliteSessions,
+    Database, RandomKeys, SqliteAccounts, SqliteApiTokens, SqliteAudit, SqliteIngestCounter, SqliteKeys,
+    SqliteProjects, SqliteSessions,
 };
 use logdock_issues::application::{IssuePorts, IssueUseCases};
 use logdock_kernel::{Mailer, Secret};
@@ -90,6 +90,7 @@ impl App {
             IdentityPorts {
                 accounts,
                 sessions: Arc::new(SqliteSessions::new(db.clone())),
+                api_tokens: Arc::new(SqliteApiTokens::new(db.clone())),
                 hasher: Arc::new(Argon2Hasher::new()?),
                 tokens: Arc::new(RandomTokens),
                 audit: audit.clone(),

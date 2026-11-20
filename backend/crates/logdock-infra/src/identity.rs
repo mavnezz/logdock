@@ -88,6 +88,11 @@ impl Tokens for RandomTokens {
         Secret::new(hex(&random_bytes::<32>()))
     }
 
+    /// `ldt_` (Logdock token, for secret scanners) and 160 random bits.
+    fn api_token(&self) -> Secret {
+        Secret::new(format!("ldt_{}", hex(&random_bytes::<20>())))
+    }
+
     fn hash(&self, token: &Secret) -> TokenHash {
         TokenHash::new(sha256_hex(token.expose()))
     }
@@ -127,6 +132,8 @@ mod tests {
         let token = tokens.session_token();
         assert_eq!(token.expose().len(), 64);
         assert_ne!(token.expose(), tokens.session_token().expose());
+        let api = tokens.api_token();
+        assert!(api.expose().starts_with("ldt_") && api.expose().len() == 44, "{}", api.expose());
         assert_eq!(tokens.hash(&token).as_str().len(), 64);
         assert_ne!(tokens.csrf_token().expose(), tokens.csrf_token().expose());
         let code = new_setup_code();

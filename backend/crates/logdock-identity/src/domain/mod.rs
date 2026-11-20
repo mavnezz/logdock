@@ -1,4 +1,5 @@
 mod account;
+mod api_token;
 mod password;
 mod role;
 mod session;
@@ -6,6 +7,7 @@ mod setup_code;
 mod throttle;
 
 pub use account::{Account, AccountId, DisplayName, Email, InvalidAccount, Locale, NewAccount};
+pub use api_token::{ApiToken, ApiTokenId, InvalidTokenName, NewApiToken, TokenName, TokenScope};
 pub use password::{MAX_PASSWORD_BYTES, MIN_PASSWORD_CHARS, NewPassword, PasswordHash, PasswordRejected};
 pub use role::{Permission, Role};
 pub use session::{NewSession, Session, SessionId, SessionPolicy, TokenHash};
@@ -23,6 +25,8 @@ pub enum AuditAction {
     AccountUpdate,
     AccountPasswordReset,
     AccountDelete,
+    TokenCreate,
+    TokenRevoke,
 }
 
 impl AuditAction {
@@ -36,6 +40,8 @@ impl AuditAction {
             Self::AccountUpdate => "account.update",
             Self::AccountPasswordReset => "account.password_reset",
             Self::AccountDelete => "account.delete",
+            Self::TokenCreate => "token.create",
+            Self::TokenRevoke => "token.revoke",
         }
     }
 }

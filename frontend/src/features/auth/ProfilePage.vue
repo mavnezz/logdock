@@ -11,6 +11,7 @@ import { NativeSelect } from '@/shared/ui/native-select'
 import { FormField, PageHeader } from '@/shared/ui/page'
 
 import { useChangePassword, useUpdateProfile } from './api'
+import TokensSection from './TokensSection.vue'
 import { useSessionStore } from '@/shared/session/store'
 
 const { t } = useI18n()
@@ -103,5 +104,7 @@ async function savePassword(): Promise<void> {
         }}</Button>
       </div>
     </form>
+
+    <TokensSection />
   </div>
 </template>

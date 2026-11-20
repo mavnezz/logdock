@@ -7,6 +7,7 @@ mod monitors;
 mod performance;
 mod projects;
 mod system;
+mod tokens;
 mod traces;
 
 use utoipa_axum::router::OpenApiRouter;
@@ -25,4 +26,5 @@ pub(crate) fn v1() -> OpenApiRouter<ApiState> {
         .merge(performance::routes())
         .merge(monitors::routes())
         .merge(system::routes())
+        .merge(tokens::routes())
 }

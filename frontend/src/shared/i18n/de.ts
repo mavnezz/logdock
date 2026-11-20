@@ -288,6 +288,36 @@ const de: Messages = {
       'Logdock hat ihn beim Start ins Log geschrieben: docker compose logs logdock | grep setup_code',
     submit: 'Administrator anlegen',
   },
+  tokens: {
+    title: 'API-Tokens',
+    description:
+      'Programme lesen Logdock in deinem Namen: Skripte über die API, Claude über MCP. Ein Token liest alles, was du lesen darfst; mit „Lesen und bearbeiten“ löst, pausiert und öffnet er auch Issues. Sonst nichts.',
+    create: 'Neuer Token',
+    name: 'Name',
+    nameHint: 'Wofür er ist, z. B. claude auf meinem Laptop.',
+    scope: 'Darf',
+    scopeHint: 'Ein Token verwaltet nie Projekte, Schlüssel oder Konten.',
+    scopes: { read: 'Lesen', triage: 'Lesen und bearbeiten' },
+    lastUsed: 'Zuletzt benutzt',
+    never: 'nie',
+    revoked: 'widerrufen',
+    revoke: 'Widerrufen',
+    revokeTitle: 'Diesen Token widerrufen?',
+    revokeDescription:
+      'Programme, die ihn benutzen, werden sofort abgewiesen. Das lässt sich nicht rückgängig machen.',
+    empty: 'Noch kein Token',
+    createdTitle: 'Token angelegt',
+    createdDescription: 'Kopiere ihn jetzt: Der Token wird nur dieses eine Mal gezeigt.',
+    token: 'Token',
+    claude: 'Claude Code',
+    claudeHint:
+      'Bindet Logdock als MCP-Server ein. Claude sucht dann in Logs, liest Issues mit Stacktrace, folgt Traces und schaut in die Performance.',
+    api: 'API',
+    apiHint:
+      'Die API ist unter /api/v1/openapi.json beschrieben; der Token gehört in jede Anfrage.',
+    copy: 'Kopieren',
+    copied: 'Kopiert',
+  },
   profile: {
     title: 'Profil',
     details: 'Deine Angaben',

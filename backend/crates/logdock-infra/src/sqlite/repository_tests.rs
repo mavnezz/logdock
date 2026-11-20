@@ -1,8 +1,11 @@
 //! The repositories against a real database in a temporary directory.
 
-use logdock_identity::application::ports::{AccountRepository, AuditReader, SessionRepository};
+use logdock_identity::application::ports::{
+    AccountRepository, ApiTokenRepository, AuditReader, SessionRepository,
+};
 use logdock_identity::domain::{
-    AccountId, DisplayName, Email, Locale, NewAccount, NewSession, PasswordHash, Role, TokenHash,
+    AccountId, DisplayName, Email, Locale, NewAccount, NewApiToken, NewSession, PasswordHash, Role,
+    TokenHash, TokenName, TokenScope,
 };
 use logdock_kernel::{AuditEntry, AuditLog, Day, Outcome, ProjectId, RequestContext, Secret, Timestamp};
 use logdock_projects::application::ports::{IngestCounter, KeyRepository, KeyTokens, ProjectRepository};
@@ -199,4 +202,44 @@ async fn stores_projects_stages_keys_and_counts() {
     projects.delete(project.id).await.unwrap();
     assert!(projects.find(project.id).await.unwrap().is_none());
     assert!(keys.find_by_hash(&hash).await.unwrap().is_none(), "keys went with it");
+}
+
+#[tokio::test]
+async fn stores_api_tokens_with_their_account() {
+    let (db, _dir) = database().await;
+    let accounts = SqliteAccounts::new(db.clone());
+    let ada = accounts.create(new_account("ada@example.com", 1)).await.unwrap().unwrap();
+    let tokens = SqliteApiTokens::new(db.clone());
+    let new = |name: &str, scope| NewApiToken {
+        account_id: ada.id,
+        name: TokenName::parse(name).unwrap(),
+        scope,
+        prefix: format!("ldt_{name}"),
+        hash: TokenHash::new(format!("hash-{name}")),
+        created_at: Timestamp::from_unix_seconds(10),
+    };
+    let read = tokens.create(new("read", TokenScope::Read)).await.unwrap();
+    let triage = tokens.create(new("triage", TokenScope::Triage)).await.unwrap();
+    assert_eq!(
+        tokens.find_by_hash(&TokenHash::new("hash-triage".into())).await.unwrap(),
+        Some(triage.clone())
+    );
+    assert!(tokens.find_by_hash(&TokenHash::new("nope".into())).await.unwrap().is_none());
+    tokens.touch(read.id, Timestamp::from_unix_seconds(20)).await.unwrap();
+    tokens.revoke(read.id, Timestamp::from_unix_seconds(30)).await.unwrap();
+    tokens.revoke(read.id, Timestamp::from_unix_seconds(40)).await.unwrap();
+    let listed = tokens.list(ada.id).await.unwrap();
+    assert_eq!(listed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["triage", "read"]);
+    assert_eq!(listed[1].scope, TokenScope::Read);
+    assert_eq!(listed[1].last_used_at, Some(Timestamp::from_unix_seconds(20)));
+    assert_eq!(listed[1].revoked_at, Some(Timestamp::from_unix_seconds(30)), "revoked once");
+
+    sqlx::query("UPDATE api_tokens SET scope = 'root' WHERE id = ?")
+        .bind(triage.id.get())
+        .execute(db.pool())
+        .await
+        .unwrap();
+    assert!(tokens.list(ada.id).await.is_err(), "an unknown scope is an error, not a guess");
+    accounts.delete(ada.id).await.unwrap();
+    assert!(tokens.list(ada.id).await.unwrap().is_empty(), "tokens go with their account");
 }

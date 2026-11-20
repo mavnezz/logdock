@@ -11,6 +11,7 @@ mod dto;
 mod error;
 mod extract;
 mod ingest;
+mod mcp;
 mod routes;
 mod state;
 
@@ -24,7 +25,7 @@ use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetReques
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
-use utoipa::openapi::security::{ApiKey, ApiKeyValue, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 use utoipa_axum::router::OpenApiRouter;
 
@@ -55,9 +56,11 @@ pub const API_V1: &str = "/api/v1";
 )]
 struct ApiDoc;
 
-/// Documents the session cookie. Operations that need it say
-/// `security(("session" = []))`; those that change something also need the
-/// session's CSRF token in `X-CSRF-Token`.
+/// Documents the session cookie and API tokens. Operations that need a
+/// session say `security(("session" = []))`; those that change something
+/// also need the session's CSRF token in `X-CSRF-Token`. An API token works
+/// for every operation that reads, and for those that say
+/// `security(("token" = []))`.
 struct SessionSecurity;
 
 impl Modify for SessionSecurity {
@@ -69,6 +72,19 @@ impl Modify for SessionSecurity {
                 "__Host-logdock_session",
                 "Set by sign-in or setup. Named `logdock_session` where secure cookies are off.",
             ))),
+        );
+        components.add_security_scheme(
+            "token",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .description(Some(
+                        "An API token (`ldt_…`) from the profile page. It acts for its account and reads \
+                         everything a session does; it changes nothing but, with the `triage` scope, issues' \
+                         state. No CSRF token is needed.",
+                    ))
+                    .build(),
+            ),
         );
     }
 }
@@ -90,6 +106,8 @@ const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; img-src 'self' data:;
 pub fn router(state: ApiState) -> Router {
     let (router, openapi) = api().split_for_parts();
     let openapi_json = openapi.to_json().expect("the OpenAPI document serializes");
+    // The MCP server's tools read through the API itself.
+    let for_mcp = router.clone().with_state(state.clone());
 
     router
         .route(
@@ -98,6 +116,7 @@ pub fn router(state: ApiState) -> Router {
         )
         .merge(ingest::router(&state))
         .merge(routes::logs::stream_router())
+        .merge(mcp::router(for_mcp))
         .fallback(web)
         .with_state(state)
         .layer(SetResponseHeaderLayer::if_not_present(

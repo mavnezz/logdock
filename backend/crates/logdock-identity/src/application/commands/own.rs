@@ -44,7 +44,7 @@ impl ChangePassword {
         let password = NewPassword::parse(input.new)?;
         let hash = c.ports.hasher.hash(password.secret()).await?;
         c.ports.accounts.update_password(account.id, &hash, now).await?;
-        c.ports.sessions.delete_for_account(account.id, Some(auth.session_id)).await?;
+        c.ports.sessions.delete_for_account(account.id, auth.session().map(|session| session.id)).await?;
         c.record_success(&keys);
         let entry = AuditEntry::new(now, AuditAction::PasswordChange.as_str(), Outcome::Success, request);
         c.audit(entry.by(&auth.actor())).await

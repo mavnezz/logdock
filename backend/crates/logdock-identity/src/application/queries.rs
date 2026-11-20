@@ -3,7 +3,7 @@ use std::sync::Arc;
 use logdock_kernel::{AuditEntry, Secret};
 
 use crate::application::context::Context;
-use crate::application::{AccountSummary, AuthContext, IdentityError};
+use crate::application::{AccountSummary, AuthContext, Credential, IdentityError, SessionCredential};
 use crate::domain::Permission;
 
 /// Query: whether the first setup is still to be done.
@@ -57,10 +57,12 @@ impl Authenticate {
             session.last_seen_at = now;
         }
         Ok(AuthContext {
-            session_id: session.id,
-            expires_at: session.expires_at(&c.config.sessions),
-            csrf_token: session.csrf_token,
             account: AccountSummary::from(&account),
+            credential: Credential::Session(SessionCredential {
+                id: session.id,
+                expires_at: session.expires_at(&c.config.sessions),
+                csrf_token: session.csrf_token,
+            }),
         })
     }
 }

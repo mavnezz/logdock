@@ -112,7 +112,10 @@ async fn sessions_run_out_when_idle_and_stay_alive_when_used() {
     let token = signed_in.token;
     let authenticate = &identity.use_cases.authenticate;
     let auth = authenticate.execute(&token).await.unwrap();
-    assert_eq!(auth.csrf_token.expose(), signed_in.session.csrf_token.expose());
+    assert_eq!(
+        auth.session().unwrap().csrf_token.expose(),
+        signed_in.session.session().unwrap().csrf_token.expose()
+    );
 
     identity.clock.advance(Duration::from_secs(11 * 3600));
     authenticate.execute(&token).await.unwrap();
@@ -225,8 +228,8 @@ async fn people_change_their_own_password_and_profile() {
     let good = ChangePasswordInput { current: Secret::new(PASSWORD), new: Secret::new("a new password") };
     identity.use_cases.change_password.execute(&admin, good, &request()).await.unwrap();
     let sessions = identity.sessions.sessions.lock().unwrap().clone();
-    assert!(sessions.iter().any(|s| s.id == admin.session_id), "this session stays");
-    assert!(sessions.iter().all(|s| s.id != other_session.session_id), "the other one ended");
+    assert!(sessions.iter().any(|s| s.id == admin.session().unwrap().id), "this session stays");
+    assert!(sessions.iter().all(|s| s.id != other_session.session().unwrap().id), "the other one ended");
     assert!(login(&identity, "ada@example.com", "a new password").await.is_ok());
 
     let changes = ProfileChanges { name: Some("Ada L.".into()), locale: Some("en".into()) };
@@ -274,4 +277,84 @@ async fn purges_expired_sessions() {
     assert_eq!(identity.use_cases.purge_sessions.execute().await.unwrap(), 0);
     identity.clock.advance(Duration::from_secs(13 * 3600));
     assert_eq!(identity.use_cases.purge_sessions.execute().await.unwrap(), 1);
+}
+
+#[tokio::test]
+async fn an_account_makes_api_tokens_that_act_for_it_within_their_scope() {
+    use std::sync::atomic::Ordering;
+
+    use crate::domain::{Permission, TokenScope};
+
+    let identity = TestIdentity::new();
+    let admin = admin(&identity).await;
+    let uc = &identity.use_cases;
+    let created = uc.create_token.execute(&admin, " claude ", TokenScope::Read, &request()).await.unwrap();
+    assert!(created.secret.expose().starts_with("ldt_"));
+    assert_eq!(created.token.prefix, created.secret.expose()[..12]);
+    assert_eq!(created.token.name.as_str(), "claude");
+
+    // The token acts for its account, narrowed to reading.
+    let auth = uc.authenticate_token.execute(&created.secret).await.unwrap();
+    assert_eq!(auth.account.id, admin.account.id);
+    assert!(auth.session().is_none());
+    assert_eq!(auth.token().unwrap().scope, TokenScope::Read);
+    assert!(auth.can(Permission::ReadData));
+    assert!(!auth.can(Permission::TriageIssues), "read only");
+    assert!(!auth.can(Permission::ManageProjects), "never more, even for an administrator");
+    assert_eq!(auth.actor().name, "ada@example.com (token claude)");
+
+    // Its last use is written once a minute at most.
+    uc.authenticate_token.execute(&created.secret).await.unwrap();
+    assert_eq!(identity.api_tokens.touches.load(Ordering::SeqCst), 1);
+    identity.clock.advance(Duration::from_secs(61));
+    uc.authenticate_token.execute(&created.secret).await.unwrap();
+    assert_eq!(identity.api_tokens.touches.load(Ordering::SeqCst), 2);
+
+    // A token makes and revokes no tokens, and does not sign out.
+    let by_token = uc.create_token.execute(&auth, "more", TokenScope::Read, &request()).await;
+    assert!(matches!(by_token, Err(IdentityError::Forbidden)));
+    let revoked_by_token = uc.revoke_token.execute(&auth, created.token.id, &request()).await;
+    assert!(matches!(revoked_by_token, Err(IdentityError::Forbidden)));
+    assert!(matches!(uc.logout.execute(&auth, &request()).await, Err(IdentityError::Forbidden)));
+
+    let triage = uc.create_token.execute(&admin, "fixer", TokenScope::Triage, &request()).await.unwrap();
+    let auth = uc.authenticate_token.execute(&triage.secret).await.unwrap();
+    assert!(auth.can(Permission::TriageIssues));
+    let listed = uc.list_tokens.execute(&admin).await.unwrap();
+    assert_eq!(listed.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["fixer", "claude"]);
+
+    // Each sees and revokes only their own.
+    let bob = member(&identity, &admin, "bob@example.com").await;
+    assert!(uc.list_tokens.execute(&bob).await.unwrap().is_empty());
+    let foreign = uc.revoke_token.execute(&bob, created.token.id, &request()).await;
+    assert!(matches!(foreign, Err(IdentityError::TokenNotFound)));
+    uc.revoke_token.execute(&admin, created.token.id, &request()).await.unwrap();
+    let gone = uc.authenticate_token.execute(&created.secret).await;
+    assert!(matches!(gone, Err(IdentityError::Unauthenticated)), "revoked at once");
+
+    for bad in ["", "ldt_unknown", "token-1"] {
+        let refused = uc.authenticate_token.execute(&Secret::new(bad)).await;
+        assert!(matches!(refused, Err(IdentityError::Unauthenticated)), "{bad}");
+    }
+    let unnamed = uc.create_token.execute(&admin, "  ", TokenScope::Read, &request()).await;
+    assert!(matches!(unnamed, Err(IdentityError::InvalidTokenName(_))));
+    let audit: Vec<_> = identity.audit.0.lock().unwrap().iter().map(|e| e.action.clone()).collect();
+    assert_eq!(audit.iter().filter(|a| a.starts_with("token.")).count(), 3);
+}
+
+#[tokio::test]
+async fn a_disabled_account_s_tokens_stop_working() {
+    use crate::application::commands::AccountChanges;
+    use crate::domain::TokenScope;
+
+    let identity = TestIdentity::new();
+    let admin = admin(&identity).await;
+    let bob = member(&identity, &admin, "bob@example.com").await;
+    let uc = &identity.use_cases;
+    let created = uc.create_token.execute(&bob, "script", TokenScope::Triage, &request()).await.unwrap();
+    assert!(uc.authenticate_token.execute(&created.secret).await.is_ok());
+    let changes = AccountChanges { disabled: Some(true), ..Default::default() };
+    uc.update_account.execute(&admin, bob.account.id, changes, &request()).await.unwrap();
+    let refused = uc.authenticate_token.execute(&created.secret).await;
+    assert!(matches!(refused, Err(IdentityError::Unauthenticated)));
 }

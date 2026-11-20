@@ -5,17 +5,20 @@ mod context;
 mod error;
 pub mod ports;
 pub mod queries;
+mod tokens;
 
 use std::sync::Arc;
 
 use logdock_kernel::{Actor, AuditLog, Clock, Secret, Timestamp};
 
 use crate::domain::{
-    Account, AccountId, Email, Locale, Permission, Role, SessionId, SessionPolicy, SetupCode, ThrottlePolicy,
+    Account, AccountId, ApiTokenId, Email, Locale, Permission, Role, SessionId, SessionPolicy, SetupCode,
+    ThrottlePolicy, TokenScope,
 };
 use context::Context;
 pub use error::IdentityError;
-use ports::{AccountRepository, AuditReader, PasswordHasher, SessionRepository, Tokens};
+use ports::{AccountRepository, ApiTokenRepository, AuditReader, PasswordHasher, SessionRepository, Tokens};
+pub use tokens::{AuthenticateToken, CreateApiToken, CreatedApiToken, ListApiTokens, RevokeApiToken};
 
 /// Adapters for every port of this context, plugged in by the composition
 /// root.
@@ -23,6 +26,7 @@ use ports::{AccountRepository, AuditReader, PasswordHasher, SessionRepository, T
 pub struct IdentityPorts {
     pub accounts: Arc<dyn AccountRepository>,
     pub sessions: Arc<dyn SessionRepository>,
+    pub api_tokens: Arc<dyn ApiTokenRepository>,
     pub hasher: Arc<dyn PasswordHasher>,
     pub tokens: Arc<dyn Tokens>,
     pub audit: Arc<dyn AuditLog>,
@@ -56,6 +60,10 @@ pub struct IdentityUseCases {
     pub delete_account: commands::DeleteAccount,
     pub purge_sessions: commands::PurgeExpiredSessions,
     pub audit_log: queries::ListAudit,
+    pub create_token: CreateApiToken,
+    pub list_tokens: ListApiTokens,
+    pub revoke_token: RevokeApiToken,
+    pub authenticate_token: AuthenticateToken,
 }
 
 impl IdentityUseCases {
@@ -75,7 +83,11 @@ impl IdentityUseCases {
             reset_password: commands::ResetPassword::new(Arc::clone(&context)),
             delete_account: commands::DeleteAccount::new(Arc::clone(&context)),
             purge_sessions: commands::PurgeExpiredSessions::new(Arc::clone(&context)),
-            audit_log: queries::ListAudit::new(context),
+            audit_log: queries::ListAudit::new(Arc::clone(&context)),
+            create_token: CreateApiToken::new(Arc::clone(&context)),
+            list_tokens: ListApiTokens::new(Arc::clone(&context)),
+            revoke_token: RevokeApiToken::new(Arc::clone(&context)),
+            authenticate_token: AuthenticateToken::new(context),
         }
     }
 }
@@ -114,23 +126,68 @@ pub struct SignedIn {
     pub session: AuthContext,
 }
 
-/// The authenticated caller of a request.
+/// The authenticated caller of a request: an account, through a session of
+/// the interface or an API token.
 #[derive(Debug, Clone)]
 pub struct AuthContext {
-    pub session_id: SessionId,
+    pub account: AccountSummary,
+    pub credential: Credential,
+}
+
+#[derive(Debug, Clone)]
+pub enum Credential {
+    Session(SessionCredential),
+    Token(TokenCredential),
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionCredential {
+    pub id: SessionId,
+    /// Sent back with every change; ties requests to this session.
     pub csrf_token: Secret,
     pub expires_at: Timestamp,
-    pub account: AccountSummary,
+}
+
+#[derive(Debug, Clone)]
+pub struct TokenCredential {
+    pub id: ApiTokenId,
+    pub name: String,
+    pub scope: TokenScope,
 }
 
 impl AuthContext {
+    /// What the account may do, narrowed to the token's scope.
     pub fn can(&self, permission: Permission) -> bool {
         self.account.role.grants(permission)
+            && match &self.credential {
+                Credential::Session(_) => true,
+                Credential::Token(token) => token.scope.allows(permission),
+            }
     }
 
-    /// The signed-in account as the actor of an audit entry.
+    pub fn session(&self) -> Option<&SessionCredential> {
+        match &self.credential {
+            Credential::Session(session) => Some(session),
+            Credential::Token(_) => None,
+        }
+    }
+
+    pub fn token(&self) -> Option<&TokenCredential> {
+        match &self.credential {
+            Credential::Session(_) => None,
+            Credential::Token(token) => Some(token),
+        }
+    }
+
+    /// The signed-in account as the actor of an audit entry, with the
+    /// token it acted through.
     pub fn actor(&self) -> Actor {
-        Actor { account_id: self.account.id.get(), name: self.account.email.to_string() }
+        let email = self.account.email.as_str();
+        let name = match &self.credential {
+            Credential::Session(_) => email.to_owned(),
+            Credential::Token(token) => format!("{email} (token {})", token.name),
+        };
+        Actor { account_id: self.account.id.get(), name }
     }
 }
 

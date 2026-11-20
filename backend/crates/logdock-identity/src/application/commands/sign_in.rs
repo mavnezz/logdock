@@ -76,7 +76,8 @@ impl Logout {
 
     pub async fn execute(&self, auth: &AuthContext, request: &RequestContext) -> Result<(), IdentityError> {
         let c = &self.context;
-        c.ports.sessions.delete(auth.session_id).await?;
+        let session = auth.session().ok_or(IdentityError::Forbidden)?;
+        c.ports.sessions.delete(session.id).await?;
         let entry = AuditEntry::new(c.now(), AuditAction::Logout.as_str(), Outcome::Success, request)
             .by(&auth.actor());
         c.audit(entry).await

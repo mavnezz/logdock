@@ -90,13 +90,15 @@ pub struct Session {
     pub expires_at: String,
 }
 
-impl From<&AuthContext> for Session {
-    fn from(auth: &AuthContext) -> Self {
-        Self {
+impl Session {
+    /// `None` for a caller with an API token, which has no session.
+    fn of(auth: &AuthContext) -> Option<Self> {
+        let session = auth.session()?;
+        Some(Self {
             account: Account::from(&auth.account),
-            csrf_token: auth.csrf_token.expose().to_owned(),
-            expires_at: time(auth.expires_at),
-        }
+            csrf_token: session.csrf_token.expose().to_owned(),
+            expires_at: time(session.expires_at),
+        })
     }
 }
 
@@ -155,7 +157,9 @@ async fn complete_setup(
     };
     let signed_in = state.identity.complete_setup.execute(input, &client).await?;
     let jar = jar.add(session_cookie(&signed_in, state.config.secure_cookies));
-    Ok((jar, Json(Session::from(&signed_in.session))))
+    let session =
+        Session::of(&signed_in.session).ok_or_else(|| ApiError::internal("a sign-in without a session"))?;
+    Ok((jar, Json(session)))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -188,7 +192,9 @@ async fn login(
     let input = LoginInput { email: body.email, password: Secret::new(body.password) };
     let signed_in = state.identity.login.execute(input, &client).await?;
     let jar = jar.add(session_cookie(&signed_in, state.config.secure_cookies));
-    Ok((jar, Json(Session::from(&signed_in.session))))
+    let session =
+        Session::of(&signed_in.session).ok_or_else(|| ApiError::internal("a sign-in without a session"))?;
+    Ok((jar, Json(session)))
 }
 
 /// Ends the session.
@@ -211,8 +217,8 @@ async fn logout(
     security(("session" = [])),
     responses((status = OK, body = Session), (status = UNAUTHORIZED, body = Problem))
 )]
-async fn session(auth: Auth) -> Json<Session> {
-    Json(Session::from(&auth.0))
+async fn session(auth: Auth) -> Result<Json<Session>, ApiError> {
+    Session::of(&auth.0).map(Json).ok_or(ApiError::Forbidden)
 }
 
 #[derive(Deserialize, ToSchema)]

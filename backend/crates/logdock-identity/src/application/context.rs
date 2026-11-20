@@ -2,7 +2,8 @@ use logdock_kernel::{AuditEntry, RequestContext, Secret, Timestamp};
 use tokio::sync::Mutex;
 
 use crate::application::{
-    AccountSummary, AuthContext, IdentityConfig, IdentityError, IdentityPorts, SignedIn,
+    AccountSummary, AuthContext, Credential, IdentityConfig, IdentityError, IdentityPorts, SessionCredential,
+    SignedIn,
 };
 use crate::domain::{Account, LoginThrottle, NewSession, Permission, Role};
 
@@ -88,10 +89,8 @@ impl Context {
         Ok(SignedIn {
             token,
             session: AuthContext {
-                session_id: session.id,
-                csrf_token,
-                expires_at,
                 account: AccountSummary::from(account),
+                credential: Credential::Session(SessionCredential { id: session.id, csrf_token, expires_at }),
             },
         })
     }

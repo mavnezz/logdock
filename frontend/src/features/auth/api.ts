@@ -65,3 +65,28 @@ export function useChangePassword() {
       unwrap(api.POST('/api/v1/me/password', { body })),
   })
 }
+
+export function useTokens() {
+  return useQuery({
+    queryKey: ['tokens'],
+    queryFn: () => unwrap(api.GET('/api/v1/me/tokens')),
+  })
+}
+
+export function useCreateToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { name: string; scope: 'read' | 'triage' }) =>
+      unwrap(api.POST('/api/v1/me/tokens', { body })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tokens'] }),
+  })
+}
+
+export function useRevokeToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      unwrap(api.DELETE('/api/v1/me/tokens/{id}', { params: { path: { id } } })),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tokens'] }),
+  })
+}

@@ -116,6 +116,8 @@ impl From<logdock_identity::application::IdentityError> for ApiError {
             E::EmailTaken => Self::conflict("email_taken"),
             E::LastAdmin => Self::conflict("last_admin"),
             E::OwnAccount => Self::conflict("own_account"),
+            E::InvalidTokenName(e) => Self::InvalidInput(e.to_string()),
+            E::TokenNotFound => Self::NotFound,
             E::Port(e) => Self::internal(e),
         }
     }

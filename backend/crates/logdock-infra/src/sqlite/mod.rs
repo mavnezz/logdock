@@ -3,6 +3,7 @@
 //! written by a newer release is refused instead of being guessed at.
 
 mod accounts;
+mod api_tokens;
 mod audit;
 mod ingest_counts;
 mod keys;
@@ -20,6 +21,7 @@ use sqlx::sqlite::{
 };
 
 pub use accounts::SqliteAccounts;
+pub use api_tokens::SqliteApiTokens;
 pub use audit::SqliteAudit;
 pub use ingest_counts::SqliteIngestCounter;
 pub use keys::{RandomKeys, SqliteKeys};

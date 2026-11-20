@@ -1,9 +1,15 @@
-//! Session cookies, CSRF protection and the extractors that authenticate a
-//! request.
+//! Session cookies, CSRF protection, API tokens and the extractors that
+//! authenticate a request.
 //!
 //! A handler is protected by taking [`Auth`] as an argument. A feature test
 //! checks that every route not explicitly public answers 401 without a
 //! session.
+//!
+//! An API token (`Authorization: Bearer ldt_…`) acts for its account, within
+//! its scope. It reads; it changes something only through a handler that
+//! takes [`TokenWrites`] instead of [`Auth`], and that handler's permission
+//! must be in the token's scope. Tokens need no CSRF token: a browser never
+//! sends them by itself.
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -103,14 +109,42 @@ pub(crate) fn session_token(headers: &HeaderMap, secure: bool) -> Option<Secret>
     CookieJar::from_headers(headers).get(cookie_name(secure)).map(|cookie| Secret::new(cookie.value()))
 }
 
-async fn authenticate(parts: &Parts, state: &ApiState) -> Result<AuthContext, ApiError> {
+/// The API token in `Authorization: Bearer …`, if any.
+fn bearer_token(headers: &HeaderMap) -> Option<Secret> {
+    let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
+    let (scheme, token) = value.split_once(' ')?;
+    scheme.eq_ignore_ascii_case("bearer").then(|| Secret::new(token.trim()))
+}
+
+/// The caller of a request that carries an API token; `None` without one.
+pub(crate) async fn token_caller(
+    headers: &HeaderMap,
+    state: &ApiState,
+) -> Option<Result<AuthContext, ApiError>> {
+    let token = bearer_token(headers)?;
+    Some(state.identity.authenticate_token.execute(&token).await.map_err(ApiError::from))
+}
+
+async fn authenticate(parts: &Parts, state: &ApiState, token_writes: bool) -> Result<AuthContext, ApiError> {
+    if let Some(caller) = token_caller(&parts.headers, state).await {
+        let auth = caller?;
+        if !parts.method.is_safe() && !token_writes {
+            return Err(ApiError::Rejected {
+                status: axum::http::StatusCode::FORBIDDEN,
+                code: "token_read_only",
+                detail: Some("API tokens read; only issues' state can be changed with one".into()),
+            });
+        }
+        return Ok(auth);
+    }
     let secure = state.config.secure_cookies;
     let token = session_token(&parts.headers, secure).ok_or(ApiError::Unauthenticated)?;
     let auth = state.identity.authenticate.execute(&token).await?;
     if !parts.method.is_safe() {
         check_same_origin(&parts.headers)?;
         let sent = parts.headers.get(CSRF_HEADER).map(|value| value.as_bytes()).unwrap_or_default();
-        if !constant_time_eq(sent, auth.csrf_token.expose().as_bytes()) {
+        let expected = auth.session().map(|s| s.csrf_token.expose().as_bytes()).unwrap_or_default();
+        if expected.is_empty() || !constant_time_eq(sent, expected) {
             return Err(ApiError::CsrfRejected);
         }
     }
@@ -131,7 +165,25 @@ impl FromRequestParts<ApiState> for Auth {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &ApiState) -> Result<Self, Self::Rejection> {
-        authenticate(parts, state).await.map(Self)
+        authenticate(parts, state, false).await.map(Self)
+    }
+}
+
+/// As [`Auth`], for the few changes an API token may make: the handler's
+/// permission still decides, narrowed to the token's scope.
+pub struct TokenWrites(pub AuthContext);
+
+impl TokenWrites {
+    pub fn require(&self, permission: Permission) -> Result<(), ApiError> {
+        if self.0.can(permission) { Ok(()) } else { Err(ApiError::Forbidden) }
+    }
+}
+
+impl FromRequestParts<ApiState> for TokenWrites {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &ApiState) -> Result<Self, Self::Rejection> {
+        authenticate(parts, state, true).await.map(Self)
     }
 }
 

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use logdock_kernel::PortError;
 
-use crate::domain::{InvalidAccount, PasswordRejected};
+use crate::domain::{InvalidAccount, InvalidTokenName, PasswordRejected};
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityError {
@@ -34,6 +34,10 @@ pub enum IdentityError {
     LastAdmin,
     #[error("change your own account in your profile")]
     OwnAccount,
+    #[error(transparent)]
+    InvalidTokenName(#[from] InvalidTokenName),
+    #[error("there is no such token")]
+    TokenNotFound,
     #[error(transparent)]
     Port(#[from] PortError),
 }

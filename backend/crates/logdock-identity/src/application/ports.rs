@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use logdock_kernel::{AuditEntry, PortError, Secret, Timestamp};
 
 use crate::domain::{
-    Account, AccountId, Email, NewAccount, NewSession, PasswordHash, Session, SessionId, TokenHash,
+    Account, AccountId, ApiToken, ApiTokenId, Email, NewAccount, NewApiToken, NewSession, PasswordHash,
+    Session, SessionId, TokenHash,
 };
 
 #[async_trait]
@@ -65,6 +66,20 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<u64, PortError>;
 }
 
+#[async_trait]
+pub trait ApiTokenRepository: Send + Sync {
+    async fn create(&self, token: NewApiToken) -> Result<ApiToken, PortError>;
+
+    /// The account's tokens, newest first.
+    async fn list(&self, account: AccountId) -> Result<Vec<ApiToken>, PortError>;
+
+    async fn find_by_hash(&self, hash: &TokenHash) -> Result<Option<ApiToken>, PortError>;
+
+    async fn revoke(&self, id: ApiTokenId, at: Timestamp) -> Result<(), PortError>;
+
+    async fn touch(&self, id: ApiTokenId, at: Timestamp) -> Result<(), PortError>;
+}
+
 /// Argon2id, which takes a while: adapters run it off the async threads.
 #[async_trait]
 pub trait PasswordHasher: Send + Sync {
@@ -82,6 +97,9 @@ pub trait Tokens: Send + Sync {
 
     /// A new CSRF token.
     fn csrf_token(&self) -> Secret;
+
+    /// A new API token: `ldt_` and random characters.
+    fn api_token(&self) -> Secret;
 
     fn hash(&self, token: &Secret) -> TokenHash;
 }

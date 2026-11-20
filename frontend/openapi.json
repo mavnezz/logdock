@@ -712,7 +712,7 @@
         },
         "security": [
           {
-            "session": []
+            "token": []
           }
         ]
       }
@@ -1182,6 +1182,114 @@
             }
           },
           "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/tokens": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "The caller's API tokens, newest first.",
+        "operationId": "list_tokens",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Token"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "A new API token of the caller's account; shown this once. Made in a\nsession only, never with another token.",
+        "operationId": "create_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_input`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "One of the caller's tokens stops working at once.",
+        "operationId": "revoke_token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
             "content": {
               "application/json": {
                 "schema": {
@@ -2778,6 +2886,23 @@
         },
         "additionalProperties": false
       },
+      "CreateTokenRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "scope"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What it is for, such as `claude on my laptop`."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreatedKey": {
         "type": "object",
         "required": [
@@ -2796,6 +2921,27 @@
           "secret": {
             "type": "string",
             "description": "The key itself, shown this once."
+          }
+        }
+      },
+      "CreatedToken": {
+        "type": "object",
+        "required": [
+          "token",
+          "secret",
+          "mcp_url"
+        ],
+        "properties": {
+          "mcp_url": {
+            "type": "string",
+            "description": "Logdock's MCP endpoint, for `claude mcp add`."
+          },
+          "secret": {
+            "type": "string",
+            "description": "The token itself, shown this once."
+          },
+          "token": {
+            "$ref": "#/components/schemas/Token"
           }
         }
       },
@@ -4102,6 +4248,13 @@
           }
         }
       },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "read",
+          "triage"
+        ]
+      },
       "SeriesBucket": {
         "allOf": [
           {
@@ -4475,6 +4628,47 @@
           }
         }
       },
+      "Token": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "prefix",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "The token's first characters."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        }
+      },
       "Trace": {
         "type": "object",
         "required": [
@@ -4743,6 +4937,11 @@
         "in": "cookie",
         "name": "__Host-logdock_session",
         "description": "Set by sign-in or setup. Named `logdock_session` where secure cookies are off."
+      },
+      "token": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API token (`ldt_…`) from the profile page. It acts for its account and reads everything a session does; it changes nothing but, with the `triage` scope, issues' state. No CSRF token is needed."
       }
     }
   },

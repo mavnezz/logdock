@@ -300,6 +300,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's API tokens, newest first. */
+        get: operations["list_tokens"];
+        put?: never;
+        /**
+         * A new API token of the caller's account; shown this once. Made in a
+         *     session only, never with another token.
+         */
+        post: operations["create_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** One of the caller's tokens stops working at once. */
+        delete: operations["revoke_token"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/monitors": {
         parameters: {
             query?: never;
@@ -728,12 +766,24 @@ export interface components {
             environments?: string[];
             name: string;
         };
+        CreateTokenRequest: {
+            /** @description What it is for, such as `claude on my laptop`. */
+            name: string;
+            scope: components["schemas"]["Scope"];
+        };
         CreatedKey: {
             /** @description The DSN for the Sentry SDK: `SENTRY_LARAVEL_DSN`. */
             dsn: string;
             key: components["schemas"]["Key"];
             /** @description The key itself, shown this once. */
             secret: string;
+        };
+        CreatedToken: {
+            /** @description Logdock's MCP endpoint, for `claude mcp add`. */
+            mcp_url: string;
+            /** @description The token itself, shown this once. */
+            secret: string;
+            token: components["schemas"]["Token"];
         };
         Environment: {
             created_at: string;
@@ -1106,6 +1156,8 @@ export interface components {
             status?: string | null;
             trace_id: string;
         };
+        /** @enum {string} */
+        Scope: "read" | "triage";
         SeriesBucket: components["schemas"]["Stats"] & {
             start: string;
         };
@@ -1228,6 +1280,17 @@ export interface components {
         TestMailSent: {
             /** @description How many addresses it went to. */
             recipients: number;
+        };
+        Token: {
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            last_used_at?: string | null;
+            name: string;
+            /** @description The token's first characters. */
+            prefix: string;
+            revoked_at?: string | null;
+            scope: components["schemas"]["Scope"];
         };
         Trace: {
             events: components["schemas"]["EventListItem"][];
@@ -2004,6 +2067,84 @@ export interface operations {
                 };
             };
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Token"][];
+                };
+            };
+        };
+    };
+    create_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTokenRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedToken"];
+                };
+            };
+            /** @description `invalid_input` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

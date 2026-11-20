@@ -7,10 +7,13 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use logdock_kernel::{AuditEntry, AuditLog, Clock, PortError, Secret, Timestamp};
 
-use crate::application::ports::{AccountRepository, AuditReader, PasswordHasher, SessionRepository, Tokens};
+use crate::application::ports::{
+    AccountRepository, ApiTokenRepository, AuditReader, PasswordHasher, SessionRepository, Tokens,
+};
 use crate::application::{IdentityConfig, IdentityPorts, IdentityUseCases};
 use crate::domain::{
-    Account, AccountId, Email, NewAccount, NewSession, PasswordHash, Session, SessionId, SetupCode, TokenHash,
+    Account, AccountId, ApiToken, ApiTokenId, Email, NewAccount, NewApiToken, NewSession, PasswordHash,
+    Session, SessionId, SetupCode, TokenHash,
 };
 
 pub const SETUP_CODE: &str = "TEST-CODE";
@@ -191,8 +194,61 @@ impl Tokens for CountingTokens {
         Secret::new(format!("csrf-{}", self.0.fetch_add(1, Ordering::SeqCst) + 1))
     }
 
+    fn api_token(&self) -> Secret {
+        Secret::new(format!("ldt_{:012}", self.0.fetch_add(1, Ordering::SeqCst) + 1))
+    }
+
     fn hash(&self, token: &Secret) -> TokenHash {
         TokenHash::new(format!("hash:{}", token.expose()))
+    }
+}
+
+#[derive(Default)]
+pub struct MemoryApiTokens {
+    pub tokens: Mutex<Vec<(ApiToken, TokenHash)>>,
+    pub touches: AtomicI64,
+}
+
+#[async_trait]
+impl ApiTokenRepository for MemoryApiTokens {
+    async fn create(&self, new: NewApiToken) -> Result<ApiToken, PortError> {
+        let mut tokens = self.tokens.lock().unwrap();
+        let token = ApiToken {
+            id: ApiTokenId::new(tokens.len() as i64 + 1),
+            account_id: new.account_id,
+            name: new.name,
+            scope: new.scope,
+            prefix: new.prefix,
+            created_at: new.created_at,
+            last_used_at: None,
+            revoked_at: None,
+        };
+        tokens.push((token.clone(), new.hash));
+        Ok(token)
+    }
+
+    async fn list(&self, account: AccountId) -> Result<Vec<ApiToken>, PortError> {
+        let tokens = self.tokens.lock().unwrap();
+        Ok(tokens.iter().rev().filter(|(t, _)| t.account_id == account).map(|(t, _)| t.clone()).collect())
+    }
+
+    async fn find_by_hash(&self, hash: &TokenHash) -> Result<Option<ApiToken>, PortError> {
+        Ok(self.tokens.lock().unwrap().iter().find(|(_, h)| h == hash).map(|(t, _)| t.clone()))
+    }
+
+    async fn revoke(&self, id: ApiTokenId, at: Timestamp) -> Result<(), PortError> {
+        if let Some((token, _)) = self.tokens.lock().unwrap().iter_mut().find(|(t, _)| t.id == id) {
+            token.revoked_at = Some(at);
+        }
+        Ok(())
+    }
+
+    async fn touch(&self, id: ApiTokenId, at: Timestamp) -> Result<(), PortError> {
+        self.touches.fetch_add(1, Ordering::SeqCst);
+        if let Some((token, _)) = self.tokens.lock().unwrap().iter_mut().find(|(t, _)| t.id == id) {
+            token.last_used_at = Some(at);
+        }
+        Ok(())
     }
 }
 
@@ -247,6 +303,7 @@ pub struct TestIdentity {
     pub use_cases: IdentityUseCases,
     pub accounts: Arc<MemoryAccounts>,
     pub sessions: Arc<MemorySessions>,
+    pub api_tokens: Arc<MemoryApiTokens>,
     pub audit: Arc<MemoryAudit>,
     pub clock: Arc<FixedClock>,
 }
@@ -255,11 +312,13 @@ impl TestIdentity {
     pub fn new() -> Self {
         let accounts = Arc::new(MemoryAccounts::default());
         let sessions = Arc::new(MemorySessions::default());
+        let api_tokens = Arc::new(MemoryApiTokens::default());
         let audit = Arc::new(MemoryAudit::default());
         let clock = Arc::new(FixedClock::at(1_800_000_000));
         let ports = IdentityPorts {
             accounts: accounts.clone(),
             sessions: sessions.clone(),
+            api_tokens: api_tokens.clone(),
             hasher: Arc::new(PlainHasher),
             tokens: Arc::new(CountingTokens::default()),
             audit: audit.clone(),
@@ -270,7 +329,7 @@ impl TestIdentity {
             setup_code: Some(SetupCode::new(Secret::new(SETUP_CODE))),
             ..Default::default()
         };
-        Self { use_cases: IdentityUseCases::new(ports, config), accounts, sessions, audit, clock }
+        Self { use_cases: IdentityUseCases::new(ports, config), accounts, sessions, api_tokens, audit, clock }
     }
 }
 
