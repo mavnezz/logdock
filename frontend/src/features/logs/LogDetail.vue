@@ -48,7 +48,10 @@ async function copy(): Promise<void> {
 
 <!-- One entry with everything it carries. -->
 <template>
-  <aside class="grid content-start gap-4 border-l bg-card p-4" :aria-label="t('logs.detail')">
+  <aside
+    class="grid content-start gap-4 rounded-xl bg-card p-4 shadow-panel"
+    :aria-label="t('logs.detail')"
+  >
     <div class="flex items-start justify-between gap-2">
       <LevelBadge :level="entry.level" />
       <button

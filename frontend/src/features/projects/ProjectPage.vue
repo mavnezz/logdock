@@ -12,6 +12,7 @@ import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { Input } from '@/shared/ui/input'
 import { PageHeader } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { useAddEnvironment, useDeleteProject, useProject, useRemoveEnvironment } from './api'
 import IngestSection from './IngestSection.vue'
@@ -53,9 +54,7 @@ const tabs = computed(() =>
 
 <template>
   <div class="grid gap-6">
-    <p v-if="project.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-if="project.isPending.value" />
     <Alert v-else-if="project.error.value" variant="destructive">{{
       problemMessage(project.error.value)
     }}</Alert>

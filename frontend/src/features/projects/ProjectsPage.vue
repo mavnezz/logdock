@@ -14,6 +14,7 @@ import { ModalDialog } from '@/shared/ui/dialog'
 import { Input } from '@/shared/ui/input'
 import { EmptyState, FormField, PageHeader } from '@/shared/ui/page'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/ui/table'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { useCreateProject, useProjects } from './api'
 
@@ -47,9 +48,7 @@ async function submit(): Promise<void> {
       <Button v-if="store.isAdmin" @click="open = true"><Plus />{{ t('projects.create') }}</Button>
     </PageHeader>
 
-    <p v-if="projects.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-if="projects.isPending.value" />
     <Alert v-else-if="projects.error.value" variant="destructive">{{
       problemMessage(projects.error.value)
     }}</Alert>

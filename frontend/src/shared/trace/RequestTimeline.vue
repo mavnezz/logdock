@@ -184,7 +184,10 @@ const details = computed(() => {
       >
     </div>
 
-    <ol class="divide-y rounded-lg border text-xs" :aria-label="t('timeline.title')">
+    <ol
+      class="divide-y overflow-hidden rounded-xl bg-card text-xs shadow-panel"
+      :aria-label="t('timeline.title')"
+    >
       <li
         v-for="row in rows"
         :key="row.node.key"
@@ -252,7 +255,7 @@ const details = computed(() => {
 
     <dl
       v-if="selected"
-      class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-lg border p-3 text-xs"
+      class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1 rounded-xl bg-card p-3 text-xs shadow-panel"
       :aria-label="t('timeline.detail.title')"
     >
       <dt class="col-span-2 mb-1 font-mono text-sm break-all whitespace-pre-wrap">

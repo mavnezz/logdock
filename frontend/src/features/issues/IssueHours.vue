@@ -45,9 +45,9 @@ const tip = computed(() => {
 
 <!-- The issue's events over the last 14 days, four hours per bar. -->
 <template>
-  <figure class="grid gap-2">
+  <figure class="grid gap-3 rounded-xl bg-card p-4 shadow-panel">
     <figcaption class="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-      <span class="font-medium text-foreground">{{ t('issues.chart.title') }}</span>
+      <span class="text-sm font-medium text-foreground">{{ t('issues.chart.title') }}</span>
       <span class="tabular-nums">{{ events(total) }}</span>
     </figcaption>
     <div class="relative" @mouseleave="hovered = null">

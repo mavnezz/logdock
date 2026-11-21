@@ -6,12 +6,12 @@ import { type LocationQuery, RouterLink, useRoute, useRouter } from 'vue-router'
 import { problemMessage } from '@/shared/i18n'
 import { formatDuration, formatNumber, formatRelative } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { LevelBadge } from '@/shared/ui/level'
-import { NativeSelect } from '@/shared/ui/native-select'
+import { SegmentedControl } from '@/shared/ui/segmented'
+import { Loading } from '@/shared/ui/skeleton'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { type Point, SeriesChart } from '@/shared/ui/series-chart'
 
@@ -31,6 +31,13 @@ const range = computed<OverviewRange>(() => {
   const value = one(route.query, 'range')
   return (RANGES as readonly string[]).includes(value) ? (value as OverviewRange) : '24h'
 })
+const rangeOptions = computed(() =>
+  RANGES.map((value) => ({
+    value,
+    label: t(`logs.rangesShort.${value}`),
+    title: t(`logs.ranges.${value}`),
+  })),
+)
 function choose(next: string): void {
   void router.replace({ query: next === '24h' ? {} : { range: next } })
 }
@@ -114,35 +121,33 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
 <template>
   <div class="grid content-start gap-6">
     <PageHeader :title="t('overview.title')" :description="t('overview.description')">
-      <NativeSelect
+      <SegmentedControl
         :model-value="range"
-        class="w-44"
-        :aria-label="t('overview.range')"
-        @update:model-value="(value) => choose(String(value))"
-      >
-        <option v-for="option in RANGES" :key="option" :value="option">
-          {{ t(`logs.ranges.${option}`) }}
-        </option>
-      </NativeSelect>
-      <ScopePicker />
+        :options="rangeOptions"
+        :label="t('overview.range')"
+        @update:model-value="choose"
+      />
     </PageHeader>
 
     <Alert v-if="overview.error.value" variant="destructive">{{
       problemMessage(overview.error.value)
     }}</Alert>
-    <p v-else-if="!data" class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+    <Loading v-else-if="!data" :tiles="6" :rows="4" />
     <EmptyState
       v-else-if="empty"
       :title="t('overview.empty')"
       :description="t('overview.emptyHint')"
     />
     <template v-else-if="data && requests && jobs && errors && logs && monitors">
-      <dl
-        class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 xl:grid-cols-6"
-      >
-        <RouterLink to="/performance" class="grid gap-1 bg-card p-4 hover:bg-accent/50">
+      <dl class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <RouterLink
+          to="/performance"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
+        >
           <dt class="text-xs text-muted-foreground">{{ t('overview.requests') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">{{ formatNumber(requests.count) }}</dd>
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
+            {{ formatNumber(requests.count) }}
+          </dd>
           <dd
             class="text-xs"
             :class="requests.flagged ? 'text-destructive' : 'text-muted-foreground'"
@@ -150,9 +155,12 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
             {{ t('overview.failedShare', { share: share(requests.flagged, requests.count) }) }}
           </dd>
         </RouterLink>
-        <RouterLink to="/performance" class="grid gap-1 bg-card p-4 hover:bg-accent/50">
+        <RouterLink
+          to="/performance"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
+        >
           <dt class="text-xs text-muted-foreground">{{ t('overview.p95') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
             {{ requests.count ? formatDuration(requests.p95_ms) : '–' }}
           </dd>
           <dd class="text-xs text-muted-foreground">
@@ -165,17 +173,24 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
         </RouterLink>
         <RouterLink
           :to="{ path: '/performance', query: { kind: 'job' } }"
-          class="grid gap-1 bg-card p-4 hover:bg-accent/50"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
         >
           <dt class="text-xs text-muted-foreground">{{ t('overview.jobs') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">{{ formatNumber(jobs.count) }}</dd>
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
+            {{ formatNumber(jobs.count) }}
+          </dd>
           <dd class="text-xs" :class="jobs.flagged ? 'text-destructive' : 'text-muted-foreground'">
             {{ t('overview.failed', { n: formatNumber(jobs.flagged) }) }}
           </dd>
         </RouterLink>
-        <RouterLink to="/issues" class="grid gap-1 bg-card p-4 hover:bg-accent/50">
+        <RouterLink
+          to="/issues"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
+        >
           <dt class="text-xs text-muted-foreground">{{ t('overview.errors') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">{{ formatNumber(errors.events) }}</dd>
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
+            {{ formatNumber(errors.events) }}
+          </dd>
           <dd class="text-xs text-muted-foreground">
             {{ t('overview.newIssues', { n: formatNumber(errors.new_issues) }, errors.new_issues)
             }}<template v-if="errors.regressed">
@@ -183,16 +198,24 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
             >
           </dd>
         </RouterLink>
-        <RouterLink :to="logsLink" class="grid gap-1 bg-card p-4 hover:bg-accent/50">
+        <RouterLink
+          :to="logsLink"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
+        >
           <dt class="text-xs text-muted-foreground">{{ t('overview.logErrors') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">{{ formatNumber(logErrors) }}</dd>
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
+            {{ formatNumber(logErrors) }}
+          </dd>
           <dd class="text-xs text-muted-foreground">
             {{ t('overview.warnings', { n: formatNumber(logs.warn) }) }}
           </dd>
         </RouterLink>
-        <RouterLink to="/monitors" class="grid gap-1 bg-card p-4 hover:bg-accent/50">
+        <RouterLink
+          to="/monitors"
+          class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel transition-colors hover:bg-accent/40"
+        >
           <dt class="text-xs text-muted-foreground">{{ t('overview.monitors') }}</dt>
-          <dd class="text-2xl font-semibold tabular-nums">
+          <dd class="text-2xl font-semibold tracking-tight tabular-nums">
             {{ monitors.total ? `${monitors.ok} / ${monitors.total}` : '–' }}
           </dd>
           <dd
@@ -210,7 +233,7 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
         </RouterLink>
       </dl>
 
-      <div class="grid gap-6 lg:grid-cols-2">
+      <div class="grid gap-4 lg:grid-cols-2">
         <SeriesChart
           :points="requestPoints"
           :title="t('overview.requests')"
@@ -247,13 +270,17 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
         />
       </div>
 
-      <div class="grid gap-6 lg:grid-cols-2">
+      <div class="grid gap-4 lg:grid-cols-2">
         <section class="grid content-start gap-2">
-          <h2 class="text-sm font-medium">{{ t('overview.topIssues') }}</h2>
+          <h2 class="text-sm font-semibold">{{ t('overview.topIssues') }}</h2>
           <p v-if="errors.top.length === 0" class="text-sm text-muted-foreground">
             {{ t('overview.noErrors') }}
           </p>
-          <ol v-else class="divide-y rounded-lg border" :aria-label="t('overview.topIssues')">
+          <ol
+            v-else
+            class="divide-y overflow-hidden rounded-xl bg-card shadow-panel"
+            :aria-label="t('overview.topIssues')"
+          >
             <li v-for="issue in errors.top" :key="issue.id" class="grid gap-1 px-3 py-2">
               <div class="flex min-w-0 items-center gap-2">
                 <LevelBadge :level="issue.level" />
@@ -283,11 +310,15 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
         </section>
 
         <section class="grid content-start gap-2">
-          <h2 class="text-sm font-medium">{{ t('overview.slowestRoutes') }}</h2>
+          <h2 class="text-sm font-semibold">{{ t('overview.slowestRoutes') }}</h2>
           <p v-if="data.slowest_routes.length === 0" class="text-sm text-muted-foreground">
             {{ t('overview.noRequests') }}
           </p>
-          <ol v-else class="divide-y rounded-lg border" :aria-label="t('overview.slowestRoutes')">
+          <ol
+            v-else
+            class="divide-y overflow-hidden rounded-xl bg-card shadow-panel"
+            :aria-label="t('overview.slowestRoutes')"
+          >
             <li v-for="row in data.slowest_routes" :key="row.name">
               <RouterLink
                 :to="routeLink(row.name)"
@@ -303,8 +334,11 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
           </ol>
 
           <template v-if="data.failing_routes.length">
-            <h2 class="mt-4 text-sm font-medium">{{ t('overview.failingRoutes') }}</h2>
-            <ol class="divide-y rounded-lg border" :aria-label="t('overview.failingRoutes')">
+            <h2 class="mt-4 text-sm font-semibold">{{ t('overview.failingRoutes') }}</h2>
+            <ol
+              class="divide-y overflow-hidden rounded-xl bg-card shadow-panel"
+              :aria-label="t('overview.failingRoutes')"
+            >
               <li v-for="row in data.failing_routes" :key="row.name">
                 <RouterLink
                   :to="routeLink(row.name)"
@@ -323,8 +357,11 @@ const isNew = (firstSeen: string) => !!data.value && firstSeen >= data.value.fro
           </template>
 
           <template v-if="monitors.failing.length">
-            <h2 class="mt-4 text-sm font-medium">{{ t('overview.failingMonitors') }}</h2>
-            <ul class="divide-y rounded-lg border" :aria-label="t('overview.failingMonitors')">
+            <h2 class="mt-4 text-sm font-semibold">{{ t('overview.failingMonitors') }}</h2>
+            <ul
+              class="divide-y overflow-hidden rounded-xl bg-card shadow-panel"
+              :aria-label="t('overview.failingMonitors')"
+            >
               <li v-for="monitor in monitors.failing" :key="monitor.id">
                 <RouterLink
                   :to="`/monitors/${monitor.id}`"

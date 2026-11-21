@@ -9,7 +9,7 @@ const props = defineProps<{ class?: HTMLAttributes['class'] }>()
 <template>
   <tr
     :class="
-      cn('transition-colors hover:bg-muted/40 data-[state=selected]:bg-primary/5', props.class)
+      cn('transition-colors hover:bg-accent/60 data-[state=selected]:bg-primary/5', props.class)
     "
   >
     <slot />

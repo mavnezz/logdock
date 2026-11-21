@@ -46,6 +46,18 @@ export function formatTime(iso: string): string {
   return `${time}.${String(date.getMilliseconds()).padStart(3, '0')}`
 }
 
+/**
+ * A chart axis's mark: the time of day over a range of a day and a half at
+ * most, the date over a longer one.
+ */
+export function formatTick(iso: string, spanMs: number): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return spanMs <= 36 * 3_600_000
+    ? date.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', hour12: false })
+    : date.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
+}
+
 /** "3 minutes ago", "in 2 hours". */
 export function formatRelative(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return '–'

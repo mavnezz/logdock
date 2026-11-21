@@ -6,10 +6,10 @@ import { RouterLink } from 'vue-router'
 
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from '@/shared/lib/format'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { failureRate, type Release, useReleases } from './api'
 
@@ -66,22 +66,18 @@ const percent = (value: number | null) => (value === null ? '–' : `${value.toF
 
 <template>
   <div class="grid content-start gap-4">
-    <PageHeader :title="t('releases.title')" :description="t('releases.description')">
-      <ScopePicker />
-    </PageHeader>
+    <PageHeader :title="t('releases.title')" :description="t('releases.description')" />
 
     <Alert v-if="releases.error.value" variant="destructive">{{
       problemMessage(releases.error.value)
     }}</Alert>
-    <p v-if="releases.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-if="releases.isPending.value" />
     <EmptyState
       v-else-if="rows.length === 0"
       :title="t('releases.empty')"
       :description="t('releases.emptyHint')"
     />
-    <div v-else class="overflow-x-auto rounded-lg border">
+    <div v-else class="overflow-x-auto rounded-xl bg-card shadow-panel">
       <table class="w-full text-sm" :aria-label="t('releases.title')">
         <thead class="border-b bg-muted/40 text-xs text-muted-foreground">
           <tr>

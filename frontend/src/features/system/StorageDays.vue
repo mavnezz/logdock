@@ -54,9 +54,9 @@ const tip = computed(() => (hovered.value === null ? null : days.value[hovered.v
 
 <!-- What each day of receipt takes, its kinds stacked; a bar's tooltip tells the sizes. -->
 <template>
-  <figure class="grid gap-1.5">
+  <figure class="grid gap-3 rounded-xl bg-card p-4 shadow-panel">
     <figcaption class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span class="font-medium text-foreground">{{ t('storage.perDay') }}</span>
+      <span class="text-sm font-medium text-foreground">{{ t('storage.perDay') }}</span>
       <span v-for="k in KINDS" :key="k.kind" class="inline-flex items-center gap-1.5">
         <span class="size-2.5 rounded-sm" :style="{ background: k.color }" aria-hidden="true" />{{
           t(`storage.kinds.${k.kind}`)

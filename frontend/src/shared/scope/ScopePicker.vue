@@ -29,14 +29,14 @@ const environment = computed({
 
 <!-- Which project and stage the page shows: all, or one. -->
 <template>
-  <div class="flex flex-wrap items-center gap-2">
-    <NativeSelect v-model="project" class="w-48" :aria-label="t('scope.project')">
+  <div class="flex items-center gap-2">
+    <NativeSelect v-model="project" class="w-32 sm:w-44" :aria-label="t('scope.project')">
       <option value="">{{ t('scope.allProjects') }}</option>
       <option v-for="p in projects.data.value ?? []" :key="p.id" :value="p.id">{{ p.name }}</option>
     </NativeSelect>
     <NativeSelect
       v-model="environment"
-      class="w-40"
+      class="w-28 sm:w-36"
       :disabled="scope.project === null"
       :aria-label="t('scope.environment')"
     >

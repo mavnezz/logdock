@@ -1,6 +1,8 @@
 // Light or dark mode. public/theme-init.js applies the same rule before the
 // first paint.
 
+import { ref } from 'vue'
+
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 const STORAGE_KEY = 'logdock.theme'
@@ -25,7 +27,11 @@ export function followSystemTheme(): void {
   prefersDark().addEventListener('change', () => applyTheme())
 }
 
+/** The preference as chosen, for the controls that show it. */
+export const themeChoice = ref<ThemePreference>(themePreference())
+
 export function setThemePreference(preference: ThemePreference): void {
+  themeChoice.value = preference
   try {
     if (preference === 'system') localStorage.removeItem(STORAGE_KEY)
     else localStorage.setItem(STORAGE_KEY, preference)

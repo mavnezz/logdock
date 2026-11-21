@@ -7,7 +7,6 @@ import { type LocationQuery, RouterLink, useRoute, useRouter } from 'vue-router'
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime, formatNumber, formatRelative } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
@@ -15,8 +14,10 @@ import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
 import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
+import { SegmentedControl } from '@/shared/ui/segmented'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { Pager } from '@/shared/ui/pager'
+import { Loading } from '@/shared/ui/skeleton'
 
 import {
   CATEGORIES,
@@ -48,6 +49,9 @@ const status = computed(() =>
 )
 const category = computed(() =>
   pick<CategoryFilter>(one(route.query, 'category'), CATEGORIES, 'error'),
+)
+const categoryOptions = computed(() =>
+  CATEGORIES.map((value) => ({ value, label: t(`issues.categories.${value}`) })),
 )
 const sort = computed(() => pick<Sort>(one(route.query, 'sort'), SORTS, 'last_seen'))
 const q = computed(() => one(route.query, 'q'))
@@ -96,7 +100,12 @@ const several = computed(() => scope.project === null)
 <template>
   <div class="grid content-start gap-4">
     <PageHeader :title="t('issues.title')" :description="t('issues.description')">
-      <ScopePicker />
+      <SegmentedControl
+        :model-value="category"
+        :options="categoryOptions"
+        :label="t('issues.category')"
+        @update:model-value="(value) => update({ category: value })"
+      />
     </PageHeader>
 
     <form class="flex flex-wrap items-center gap-2" @submit.prevent="update({ q: typed })">
@@ -107,6 +116,7 @@ const several = computed(() => scope.project === null)
         <Input
           v-model="typed"
           class="pl-8"
+          data-search
           :placeholder="t('issues.searchHint')"
           :aria-label="t('issues.search')"
         />
@@ -119,16 +129,6 @@ const several = computed(() => scope.project === null)
       >
         <option v-for="option in STATUSES" :key="option" :value="option">
           {{ t(`issues.statuses.${option}`) }}
-        </option>
-      </NativeSelect>
-      <NativeSelect
-        :model-value="category"
-        class="w-52"
-        :aria-label="t('issues.category')"
-        @update:model-value="(value) => update({ category: String(value) })"
-      >
-        <option v-for="option in CATEGORIES" :key="option" :value="option">
-          {{ t(`issues.categories.${option}`) }}
         </option>
       </NativeSelect>
       <NativeSelect
@@ -154,9 +154,7 @@ const several = computed(() => scope.project === null)
     <Alert v-if="issues.error.value" variant="destructive">{{
       problemMessage(issues.error.value)
     }}</Alert>
-    <p v-if="issues.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-if="issues.isPending.value" />
     <EmptyState
       v-else-if="list.length === 0 && page === 1"
       :title="t('issues.empty')"
@@ -168,7 +166,7 @@ const several = computed(() => scope.project === null)
             : undefined
       "
     />
-    <div v-else class="overflow-hidden rounded-lg border">
+    <div v-else class="overflow-hidden rounded-xl bg-card shadow-panel">
       <div
         class="hidden grid-cols-[minmax(0,1fr)_5rem_4.5rem_4.5rem_8rem] gap-3 border-b bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground md:grid"
         aria-hidden="true"
@@ -183,14 +181,14 @@ const several = computed(() => scope.project === null)
         <li
           v-for="issue in list"
           :key="issue.id"
-          class="grid gap-1 px-4 py-3 hover:bg-accent/50 md:grid-cols-[minmax(0,1fr)_5rem_4.5rem_4.5rem_8rem] md:items-center md:gap-3"
+          class="relative grid gap-1 px-4 py-3 transition-colors hover:bg-accent/50 md:grid-cols-[minmax(0,1fr)_5rem_4.5rem_4.5rem_8rem] md:items-center md:gap-3"
         >
           <div class="grid min-w-0 gap-1">
             <div class="flex min-w-0 items-center gap-2">
               <LevelBadge :level="issue.level" />
               <RouterLink
                 :to="`/issues/${issue.id}`"
-                class="truncate font-medium hover:underline"
+                class="truncate font-medium after:absolute after:inset-0 hover:underline"
                 :title="issue.title"
                 >{{ issue.title }}</RouterLink
               >

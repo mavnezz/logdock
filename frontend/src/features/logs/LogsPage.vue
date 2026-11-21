@@ -7,7 +7,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime, formatTime } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
@@ -16,6 +15,7 @@ import { Input } from '@/shared/ui/input'
 import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { type LogEntry, openStream, useHistogram, useLogPages, useSources } from './api'
 import { fromQuery, LEVELS, type LevelName, RANGES, toParams, toQuery } from './filters'
@@ -105,9 +105,7 @@ function refresh(): void {
 <template>
   <div class="grid gap-4" :class="selected && 'lg:grid-cols-[1fr_26rem]'">
     <div class="grid min-w-0 content-start gap-4">
-      <PageHeader :title="t('logs.title')">
-        <ScopePicker />
-      </PageHeader>
+      <PageHeader :title="t('logs.title')" />
 
       <form class="flex flex-wrap items-center gap-2" @submit.prevent="search">
         <div class="relative min-w-64 flex-1">
@@ -117,6 +115,7 @@ function refresh(): void {
           <Input
             v-model="typed"
             class="pl-8 font-mono"
+            data-search
             :placeholder="t('logs.searchHint')"
             :aria-label="t('logs.search')"
           />
@@ -144,7 +143,11 @@ function refresh(): void {
           ><RefreshCw
         /></Button>
         <Button type="button" :variant="live ? 'default' : 'outline'" @click="live = !live">
-          <component :is="live ? Pause : Play" />{{ live ? t('logs.liveOn') : t('logs.liveOff') }}
+          <span
+            v-if="live"
+            class="size-2 animate-pulse rounded-full bg-success"
+            aria-hidden="true"
+          /><component :is="live ? Pause : Play" />{{ live ? t('logs.liveOn') : t('logs.liveOff') }}
         </Button>
       </form>
 
@@ -153,11 +156,11 @@ function refresh(): void {
           v-for="level in LEVELS"
           :key="level"
           type="button"
-          class="rounded-full border px-2.5 py-0.5"
+          class="h-7 cursor-pointer rounded-lg border px-2 transition-colors"
           :class="
             filters.levels.includes(level)
-              ? 'border-primary bg-primary/10'
-              : 'text-muted-foreground'
+              ? 'border-primary/50 bg-primary/10 text-foreground'
+              : 'border-input bg-card text-muted-foreground hover:text-foreground dark:bg-input/20'
           "
           :aria-pressed="filters.levels.includes(level)"
           @click="toggleLevel(level)"
@@ -215,21 +218,31 @@ function refresh(): void {
       <Alert v-if="pages.error.value" variant="destructive">{{
         problemMessage(pages.error.value)
       }}</Alert>
-      <Alert v-if="missed > 0">{{ t('logs.missed', { count: missed }) }}</Alert>
-      <p v-if="pages.isPending.value" class="text-sm text-muted-foreground">
-        {{ t('common.loading') }}
-      </p>
+      <Alert v-if="missed > 0" variant="warning">{{ t('logs.missed', { count: missed }) }}</Alert>
+      <Loading v-if="pages.isPending.value" />
       <EmptyState
         v-else-if="shown.length === 0"
         :title="t('logs.empty')"
         :description="t('logs.emptyHint')"
       />
-      <ol v-else class="divide-y rounded-lg border font-mono text-xs" :aria-label="t('logs.list')">
+      <ol
+        v-else
+        class="divide-y overflow-hidden rounded-xl bg-card font-mono text-xs shadow-panel"
+        :aria-label="t('logs.list')"
+      >
         <li
           v-for="entry in shown"
           :key="entry.id"
-          class="grid cursor-pointer grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] items-baseline gap-2 px-3 py-1.5 hover:bg-accent sm:grid-cols-[6.5rem_4.5rem_9rem_minmax(0,1fr)]"
-          :class="selected?.id === entry.id && 'bg-accent'"
+          class="grid cursor-pointer grid-cols-[6.5rem_4.5rem_minmax(0,1fr)] items-baseline gap-2 border-l-2 px-3 py-1.5 transition-colors hover:bg-accent/70 sm:grid-cols-[6.5rem_4.5rem_9rem_minmax(0,1fr)]"
+          :class="[
+            selected?.id === entry.id
+              ? 'border-l-primary bg-primary/8'
+              : ['error', 'fatal'].includes(entry.level)
+                ? 'border-l-level-error/70 bg-level-error/[0.04]'
+                : entry.level === 'warn'
+                  ? 'border-l-level-warn/70 bg-level-warn/[0.05]'
+                  : 'border-l-transparent',
+          ]"
           @click="selected = entry"
         >
           <time
@@ -261,7 +274,7 @@ function refresh(): void {
     <LogDetail
       v-if="selected"
       :entry="selected"
-      class="lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+      class="lg:sticky lg:top-0 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto"
       @close="selected = null"
       @trace="(trace) => update({ trace })"
       @filter="(term) => update({ q: [filters.q, term].filter(Boolean).join(' ') })"

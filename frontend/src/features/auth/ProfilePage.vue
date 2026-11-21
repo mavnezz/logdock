@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { LANGUAGES, problemMessage } from '@/shared/i18n'
-import { setThemePreference, type ThemePreference, themePreference } from '@/shared/lib/theme'
+import { setThemePreference, type ThemePreference, themeChoice } from '@/shared/lib/theme'
 import { Alert } from '@/shared/ui/alert'
 import { Button } from '@/shared/ui/button'
 import { Input } from '@/shared/ui/input'
@@ -20,8 +20,10 @@ const profile = useUpdateProfile()
 const password = useChangePassword()
 
 const form = reactive({ name: store.account?.name ?? '', locale: store.account?.locale ?? 'en' })
-const theme = ref<ThemePreference>(themePreference())
-watch(theme, (next) => setThemePreference(next))
+const theme = computed<ThemePreference>({
+  get: () => themeChoice.value,
+  set: (next) => setThemePreference(next),
+})
 const passwords = reactive({ current: '', next: '' })
 const passwordChanged = ref(false)
 
@@ -97,7 +99,7 @@ async function savePassword(): Promise<void> {
       <Alert v-if="password.error.value" variant="destructive">{{
         problemMessage(password.error.value)
       }}</Alert>
-      <Alert v-if="passwordChanged">{{ t('profile.passwordChanged') }}</Alert>
+      <Alert v-if="passwordChanged" variant="success">{{ t('profile.passwordChanged') }}</Alert>
       <div>
         <Button type="submit" :disabled="password.isPending.value">{{
           t('profile.changePassword')

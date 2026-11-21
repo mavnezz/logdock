@@ -5,11 +5,11 @@ import { RouterLink } from 'vue-router'
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime, formatRelative } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { useMonitors, variant } from './api'
 
@@ -24,21 +24,21 @@ const monitors = useMonitors(
 
 <template>
   <div class="grid content-start gap-4">
-    <PageHeader :title="t('monitors.title')" :description="t('monitors.description')">
-      <ScopePicker />
-    </PageHeader>
+    <PageHeader :title="t('monitors.title')" :description="t('monitors.description')" />
     <Alert v-if="monitors.error.value" variant="destructive">{{
       problemMessage(monitors.error.value)
     }}</Alert>
-    <p v-if="monitors.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-if="monitors.isPending.value" />
     <EmptyState
       v-else-if="(monitors.data.value ?? []).length === 0"
       :title="t('monitors.empty')"
       :description="t('monitors.emptyHint')"
     />
-    <ul v-else class="divide-y rounded-lg border" :aria-label="t('monitors.title')">
+    <ul
+      v-else
+      class="divide-y overflow-hidden rounded-xl bg-card shadow-panel"
+      :aria-label="t('monitors.title')"
+    >
       <li
         v-for="monitor in monitors.data.value"
         :key="monitor.id"

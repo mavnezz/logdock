@@ -7,7 +7,6 @@ import { type LocationQuery, RouterLink, useRoute, useRouter } from 'vue-router'
 import { problemMessage } from '@/shared/i18n'
 import { formatDateTime, formatDuration, formatNumber, formatRelative } from '@/shared/lib/format'
 import { useProjectNames } from '@/shared/scope/projects'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
@@ -15,6 +14,7 @@ import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { Pager } from '@/shared/ui/pager'
 import { SeriesChart } from '@/shared/ui/series-chart'
+import { Loading } from '@/shared/ui/skeleton'
 
 import {
   KINDS,
@@ -116,13 +116,11 @@ const p95Points = computed(() =>
 <template>
   <div class="grid gap-4" :class="selected && 'xl:grid-cols-[minmax(0,1fr)_30rem]'">
     <div class="grid min-w-0 content-start gap-4">
-      <PageHeader :title="t('performance.title')" :description="t('performance.description')">
-        <ScopePicker />
-      </PageHeader>
+      <PageHeader :title="t('performance.title')" :description="t('performance.description')" />
 
       <div class="flex flex-wrap items-center gap-2">
         <div
-          class="flex flex-wrap gap-1 rounded-lg border p-1"
+          class="inline-flex h-8 max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-input bg-muted/60 p-0.5 dark:bg-input/20"
           role="tablist"
           :aria-label="t('performance.kind')"
         >
@@ -131,10 +129,10 @@ const p95Points = computed(() =>
             :key="option"
             type="button"
             role="tab"
-            class="rounded-md px-2.5 py-1 text-sm"
+            class="h-full shrink-0 cursor-pointer rounded-md px-2.5 text-xs font-medium whitespace-nowrap transition-colors"
             :class="
               kind === option
-                ? 'bg-accent font-medium'
+                ? 'bg-card text-foreground shadow-xs dark:bg-input/60'
                 : 'text-muted-foreground hover:text-foreground'
             "
             :aria-selected="kind === option"
@@ -168,15 +166,13 @@ const p95Points = computed(() =>
       <Alert v-if="overview.error.value" variant="destructive">{{
         problemMessage(overview.error.value)
       }}</Alert>
-      <p v-if="overview.isPending.value" class="text-sm text-muted-foreground">
-        {{ t('common.loading') }}
-      </p>
+      <Loading v-if="overview.isPending.value" />
       <EmptyState
         v-else-if="(overview.data.value ?? []).length === 0"
         :title="t('performance.empty')"
         :description="t('performance.emptyHint')"
       />
-      <div v-else class="overflow-x-auto rounded-lg border">
+      <div v-else class="overflow-x-auto rounded-xl bg-card shadow-panel">
         <table class="w-full text-sm" :aria-label="t(`performance.kinds.${kind}`)">
           <thead class="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>

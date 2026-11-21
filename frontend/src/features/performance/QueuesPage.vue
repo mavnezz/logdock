@@ -5,12 +5,12 @@ import { type LocationQuery, RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { problemMessage } from '@/shared/i18n'
 import { formatDuration, formatNumber } from '@/shared/lib/format'
-import ScopePicker from '@/shared/scope/ScopePicker.vue'
 import { useScopeStore } from '@/shared/scope/store'
 import { Alert } from '@/shared/ui/alert'
 import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { SeriesChart } from '@/shared/ui/series-chart'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { type PerfRange, RANGES, rangeParams, useQueues, useSeries } from './api'
 
@@ -88,9 +88,7 @@ const waitPoints = computed(() =>
 <template>
   <div class="grid gap-4" :class="selected && 'xl:grid-cols-[minmax(0,1fr)_30rem]'">
     <div class="grid min-w-0 content-start gap-4">
-      <PageHeader :title="t('queues.title')" :description="t('queues.description')">
-        <ScopePicker />
-      </PageHeader>
+      <PageHeader :title="t('queues.title')" :description="t('queues.description')" />
 
       <div class="flex flex-wrap items-center gap-2">
         <NativeSelect
@@ -113,15 +111,13 @@ const waitPoints = computed(() =>
       <Alert v-if="queues.error.value" variant="destructive">{{
         problemMessage(queues.error.value)
       }}</Alert>
-      <p v-if="queues.isPending.value" class="text-sm text-muted-foreground">
-        {{ t('common.loading') }}
-      </p>
+      <Loading v-if="queues.isPending.value" />
       <EmptyState
         v-else-if="(queues.data.value ?? []).length === 0"
         :title="t('queues.empty')"
         :description="t('queues.emptyHint')"
       />
-      <div v-else class="overflow-x-auto rounded-lg border">
+      <div v-else class="overflow-x-auto rounded-xl bg-card shadow-panel">
         <table class="w-full text-sm" :aria-label="t('queues.title')">
           <thead class="border-b bg-muted/40 text-xs text-muted-foreground">
             <tr>
@@ -172,7 +168,7 @@ const waitPoints = computed(() =>
       </div>
     </div>
 
-    <aside v-if="selected" class="grid content-start gap-4 rounded-lg border p-4">
+    <aside v-if="selected" class="grid content-start gap-4 rounded-xl bg-card p-4 shadow-panel">
       <header class="flex items-start justify-between gap-2">
         <h2 class="font-mono text-sm font-medium break-all">{{ selected }}</h2>
         <button

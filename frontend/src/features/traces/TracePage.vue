@@ -11,6 +11,7 @@ import { Alert } from '@/shared/ui/alert'
 import { buttonVariants } from '@/shared/ui/button'
 import { LevelBadge } from '@/shared/ui/level'
 import { EmptyState } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 import { buildTimeline, RequestTimeline } from '@/shared/trace'
 
 import { useTrace } from './api'
@@ -45,9 +46,7 @@ const empty = computed(() => {
     <Alert v-if="trace.error.value" variant="destructive">{{
       problemMessage(trace.error.value)
     }}</Alert>
-    <p v-else-if="trace.isPending.value" class="text-sm text-muted-foreground">
-      {{ t('common.loading') }}
-    </p>
+    <Loading v-else-if="trace.isPending.value" />
     <EmptyState v-else-if="empty" :title="t('traces.empty')" :description="t('traces.emptyHint')" />
     <template v-else-if="trace.data.value">
       <section v-if="view.roots.length" class="grid gap-2">
@@ -57,7 +56,7 @@ const empty = computed(() => {
 
       <section v-if="trace.data.value.events.length" class="grid gap-2">
         <h2 class="font-medium">{{ t('traces.errors') }}</h2>
-        <ul class="divide-y rounded-lg border text-sm">
+        <ul class="divide-y overflow-hidden rounded-xl bg-card text-sm shadow-panel">
           <li
             v-for="event in trace.data.value.events"
             :key="event.event_id"
@@ -80,7 +79,7 @@ const empty = computed(() => {
             ><Link2 />{{ t('traces.openLogs') }}</RouterLink
           >
         </div>
-        <ol class="divide-y rounded-lg border font-mono text-xs">
+        <ol class="divide-y overflow-hidden rounded-xl bg-card font-mono text-xs shadow-panel">
           <li
             v-for="entry in trace.data.value.logs"
             :key="entry.id"

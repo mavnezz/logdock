@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Trash2 } from 'lucide-vue-next'
+import { Trash2 } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
@@ -12,6 +12,7 @@ import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { type CheckIn, useDeleteMonitor, useMonitor, variant } from './api'
 
@@ -47,15 +48,10 @@ const duration = (run: CheckIn) =>
 
 <template>
   <div class="grid content-start gap-6">
-    <RouterLink
-      to="/monitors"
-      class="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      ><ArrowLeft class="size-4" />{{ t('monitors.title') }}</RouterLink
-    >
     <Alert v-if="detail.error.value" variant="destructive">{{
       problemMessage(detail.error.value)
     }}</Alert>
-    <p v-else-if="!monitor" class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+    <Loading v-else-if="!monitor" />
     <template v-else>
       <header class="flex flex-wrap items-start justify-between gap-3">
         <div class="grid gap-1">
@@ -81,7 +77,7 @@ const duration = (run: CheckIn) =>
         >
       </header>
 
-      <dl class="grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm sm:grid-cols-4">
+      <dl class="grid grid-cols-2 gap-4 rounded-xl bg-card p-4 text-sm shadow-panel sm:grid-cols-4">
         <div>
           <dt class="text-muted-foreground">{{ t('monitors.schedule') }}</dt>
           <dd class="font-mono">{{ monitor.schedule ?? t('monitors.noSchedule') }}</dd>

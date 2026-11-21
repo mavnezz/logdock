@@ -17,6 +17,8 @@ sends to Logdock, and one web interface searches across all of them.
 - **Storage:** what each day, kind and stage takes and where it is heading; each stage can keep its data for days of
   its own.
 - **For Claude and scripts:** API tokens that read (and, if wanted, triage issues), and an MCP server at `/mcp`.
+- **Quick to get around:** ⌘K (Ctrl+K) opens a command menu for pages, projects and stages, issue numbers and trace
+  IDs; `/` jumps to the page's search, `g` then a letter to a page (`g l`: the logs); light and dark mode.
 
 The apps keep using the Sentry SDK they already have; only the DSN points to Logdock.
 [docs/laravel.md](docs/laravel.md) shows how an app is set up, [docs/forwarders.md](docs/forwarders.md) how Nginx's

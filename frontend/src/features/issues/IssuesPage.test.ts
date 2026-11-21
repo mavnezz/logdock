@@ -68,7 +68,9 @@ describe('the issues page', () => {
     expect(first.searchParams.get('category')).toBe('error')
     expect(wrapper.text()).not.toContain('N+1 query')
 
-    await wrapper.find('select[aria-label="Kind"]').setValue('all')
+    const kind = (label: string) =>
+      wrapper.findAll('[role="radio"]').find((b) => b.text() === label)!
+    await kind('Errors and performance').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({ category: 'all' })
     const rows = wrapper.findAll('li')
@@ -77,7 +79,7 @@ describe('the issues page', () => {
       'Performance',
     )
 
-    await wrapper.find('select[aria-label="Kind"]').setValue('error')
+    await kind('Errors').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({})
   })

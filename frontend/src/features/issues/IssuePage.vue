@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, RotateCcw, Trash2 } from 'lucide-vue-next'
+import { Check, ChevronLeft, ChevronRight, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRouter } from 'vue-router'
@@ -14,6 +14,7 @@ import { Button } from '@/shared/ui/button'
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog'
 import { LevelBadge } from '@/shared/ui/level'
 import { NativeSelect } from '@/shared/ui/native-select'
+import { Loading } from '@/shared/ui/skeleton'
 import { RequestTimeline } from '@/shared/trace'
 
 import {
@@ -110,15 +111,10 @@ const statusText = computed(() => {
 
 <template>
   <div class="grid content-start gap-6">
-    <RouterLink
-      to="/issues"
-      class="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      ><ArrowLeft class="size-4" />{{ t('issues.title') }}</RouterLink
-    >
     <Alert v-if="detail.error.value" variant="destructive">{{
       problemMessage(detail.error.value)
     }}</Alert>
-    <p v-else-if="!issue" class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+    <Loading v-else-if="!issue" />
     <template v-else>
       <header class="grid gap-3">
         <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -197,7 +193,7 @@ const statusText = computed(() => {
         }}</Alert>
       </header>
 
-      <dl class="grid grid-cols-2 gap-4 rounded-lg border p-4 text-sm sm:grid-cols-5">
+      <dl class="grid grid-cols-2 gap-4 rounded-xl bg-card p-4 text-sm shadow-panel sm:grid-cols-5">
         <div>
           <dt class="text-muted-foreground">{{ t('issues.events') }}</dt>
           <dd class="text-lg font-semibold tabular-nums">{{ formatNumber(issue.count) }}</dd>
@@ -263,7 +259,7 @@ const statusText = computed(() => {
             problemMessage(picked.error.value)
           }}</Alert>
           <EventView v-if="event" :event="event" />
-          <p v-else class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+          <Loading v-else />
 
           <section v-if="event?.trace_id && trace.data.value" class="grid gap-2">
             <h3 class="text-sm font-medium">{{ t('issues.flow') }}</h3>

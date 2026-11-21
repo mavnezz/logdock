@@ -48,7 +48,7 @@ const reason = (code: string) =>
   <section class="grid gap-3">
     <h2 class="font-medium">{{ t('ingest.title') }}</h2>
     <p class="text-sm text-muted-foreground">{{ t('ingest.description') }}</p>
-    <div v-if="last" class="rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm">
+    <div v-if="last" class="rounded-xl border border-warning/40 bg-warning/8 p-3 text-sm">
       <p class="font-medium">{{ t('ingest.lastRejection') }}: {{ reason(last.reason) }}</p>
       <p class="text-muted-foreground">{{ last.detail }} · {{ formatDateTime(last.at) }}</p>
     </div>

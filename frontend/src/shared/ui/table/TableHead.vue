@@ -10,7 +10,7 @@ const props = defineProps<{ class?: HTMLAttributes['class'] }>()
   <th
     :class="
       cn(
-        'h-8 px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground',
+        'h-9 border-b bg-muted/50 px-3 text-left align-middle text-xs font-medium whitespace-nowrap text-muted-foreground first:pl-4 last:pr-4',
         props.class,
       )
     "

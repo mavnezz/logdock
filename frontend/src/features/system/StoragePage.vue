@@ -10,6 +10,7 @@ import { useSessionStore } from '@/shared/session/store'
 import { Alert } from '@/shared/ui/alert'
 import { Badge } from '@/shared/ui/badge'
 import { PageHeader } from '@/shared/ui/page'
+import { Loading } from '@/shared/ui/skeleton'
 
 import { useStorage } from './api'
 import StorageDays from './StorageDays.vue'
@@ -68,19 +69,17 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
     <Alert v-if="storage.error.value" variant="destructive">{{
       problemMessage(storage.error.value)
     }}</Alert>
-    <p v-else-if="!data" class="text-sm text-muted-foreground">{{ t('common.loading') }}</p>
+    <Loading v-else-if="!data" />
     <template v-else>
-      <dl
-        class="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border lg:grid-cols-4"
-      >
-        <div class="grid gap-1 bg-card p-4">
+      <dl class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel">
           <dt class="text-xs text-muted-foreground">{{ t('storage.used') }}</dt>
           <dd class="text-2xl font-semibold tabular-nums">{{ formatBytes(used) }}</dd>
           <dd class="text-xs text-muted-foreground">
             {{ t('storage.database', { size: formatBytes(data.database_bytes) }) }}
           </dd>
         </div>
-        <div class="grid gap-1 bg-card p-4">
+        <div class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel">
           <dt class="text-xs text-muted-foreground">{{ t('storage.limit') }}</dt>
           <dd class="text-2xl font-semibold tabular-nums">
             {{
@@ -107,7 +106,7 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
             }}</span>
           </dd>
         </div>
-        <div class="grid gap-1 bg-card p-4">
+        <div class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel">
           <dt class="text-xs text-muted-foreground">{{ t('storage.free') }}</dt>
           <dd class="text-2xl font-semibold tabular-nums">
             {{ data.free_bytes != null ? formatBytes(data.free_bytes) : '–' }}
@@ -116,7 +115,7 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
             {{ t('storage.reserve', { size: formatBytes(data.min_free_bytes) }) }}
           </dd>
         </div>
-        <div class="grid gap-1 bg-card p-4">
+        <div class="grid content-start gap-1 rounded-xl bg-card p-4 shadow-panel">
           <dt class="text-xs text-muted-foreground">{{ t('storage.perDayAverage') }}</dt>
           <dd class="text-2xl font-semibold tabular-nums">
             {{ data.forecast ? formatBytes(data.forecast.daily_bytes) : '–' }}
@@ -134,7 +133,7 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
       <Alert v-if="data.forecast?.disk_in_days != null" variant="destructive">{{
         t('storage.diskFull', { n: data.forecast.disk_in_days }, data.forecast.disk_in_days)
       }}</Alert>
-      <Alert v-if="data.forecast?.limit_in_days != null">{{
+      <Alert v-if="data.forecast?.limit_in_days != null" variant="warning">{{
         t('storage.limitReached', { n: data.forecast.limit_in_days }, data.forecast.limit_in_days)
       }}</Alert>
 
@@ -142,7 +141,7 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
 
       <section class="grid gap-2">
         <h2 class="text-sm font-medium">{{ t('storage.byKind') }}</h2>
-        <div class="overflow-x-auto rounded-lg border">
+        <div class="overflow-x-auto rounded-xl bg-card shadow-panel">
           <table class="w-full text-sm">
             <thead class="bg-muted/40 text-xs text-muted-foreground">
               <tr>
@@ -174,7 +173,7 @@ function keptBy(project: number, environment: number, kind: (typeof KINDS)[numbe
         <p v-if="stages.length === 0" class="text-sm text-muted-foreground">
           {{ t('storage.notMeasured') }}
         </p>
-        <div v-else class="overflow-x-auto rounded-lg border">
+        <div v-else class="overflow-x-auto rounded-xl bg-card shadow-panel">
           <table class="w-full text-sm" :aria-label="t('storage.byStage')">
             <thead class="bg-muted/40 text-xs text-muted-foreground">
               <tr>

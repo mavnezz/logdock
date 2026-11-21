@@ -130,14 +130,20 @@ describe('the overview', () => {
     expect(links).toContain('/performance?name=POST+/checkout')
     expect(links).toContain('/logs?level=error,fatal&range=24h')
 
-    await wrapper.find('select[aria-label="Time range"]').setValue('7d')
+    await wrapper
+      .findAll('[role="radio"]')
+      .find((b) => b.text() === '7d')!
+      .trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query.range).toBe('7d')
     const last = new URL(api.calls.at(-1)!.url)
     const from = new Date(last.searchParams.get('from')!)
     const to = new Date(last.searchParams.get('to')!)
     expect(Math.round((to.getTime() - from.getTime()) / 86_400_000)).toBe(7)
-    await wrapper.find('select[aria-label="Time range"]').setValue('24h')
+    await wrapper
+      .findAll('[role="radio"]')
+      .find((b) => b.text() === '24h')!
+      .trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.query).toEqual({})
   })

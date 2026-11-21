@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  // Fonts stay files: the Content Security Policy loads no data: fonts.
+  build: { assetsInlineLimit: (file) => (file.endsWith('.woff2') ? false : undefined) },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
@@ -13,9 +15,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     // `just dev` serves the API here; the browser sees one origin, as behind the proxy.
+    // LOGDOCK_API points it elsewhere, such as the dev stack (http://127.0.0.1:18480).
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8080' },
-      '/health': { target: 'http://127.0.0.1:8080' },
+      '/api': { target: process.env.LOGDOCK_API ?? 'http://127.0.0.1:8080' },
+      '/health': { target: process.env.LOGDOCK_API ?? 'http://127.0.0.1:8080' },
     },
   },
   test: {

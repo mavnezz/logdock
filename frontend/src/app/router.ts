@@ -11,6 +11,8 @@ declare module 'vue-router' {
     public?: boolean
     /** For administrators only. */
     admin?: boolean
+    /** Shows one project and stage, or all: the top bar offers to choose. */
+    scoped?: boolean
   }
 }
 
@@ -32,9 +34,21 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('./AppShell.vue'),
     children: [
       { path: '', redirect: '/overview' },
-      { path: 'overview', component: () => import('@/features/overview/OverviewPage.vue') },
-      { path: 'logs', component: () => import('@/features/logs/LogsPage.vue') },
-      { path: 'issues', component: () => import('@/features/issues/IssuesPage.vue') },
+      {
+        path: 'overview',
+        component: () => import('@/features/overview/OverviewPage.vue'),
+        meta: { scoped: true },
+      },
+      {
+        path: 'logs',
+        component: () => import('@/features/logs/LogsPage.vue'),
+        meta: { scoped: true },
+      },
+      {
+        path: 'issues',
+        component: () => import('@/features/issues/IssuesPage.vue'),
+        meta: { scoped: true },
+      },
       {
         path: 'issues/:id',
         component: () => import('@/features/issues/IssuePage.vue'),
@@ -43,15 +57,28 @@ export const routes: RouteRecordRaw[] = [
       {
         path: 'performance',
         component: () => import('@/features/performance/PerformancePage.vue'),
+        meta: { scoped: true },
       },
-      { path: 'queues', component: () => import('@/features/performance/QueuesPage.vue') },
-      { path: 'releases', component: () => import('@/features/releases/ReleasesPage.vue') },
+      {
+        path: 'queues',
+        component: () => import('@/features/performance/QueuesPage.vue'),
+        meta: { scoped: true },
+      },
+      {
+        path: 'releases',
+        component: () => import('@/features/releases/ReleasesPage.vue'),
+        meta: { scoped: true },
+      },
       {
         path: 'traces/:id',
         component: () => import('@/features/traces/TracePage.vue'),
         props: true,
       },
-      { path: 'monitors', component: () => import('@/features/monitors/MonitorsPage.vue') },
+      {
+        path: 'monitors',
+        component: () => import('@/features/monitors/MonitorsPage.vue'),
+        meta: { scoped: true },
+      },
       {
         path: 'monitors/:id',
         component: () => import('@/features/monitors/MonitorPage.vue'),

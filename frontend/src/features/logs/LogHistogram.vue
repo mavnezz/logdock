@@ -78,9 +78,9 @@ function select(index: number): void {
 
 <!-- Entries per level over time; a bar's tooltip says how many, a click narrows the range to it. -->
 <template>
-  <figure class="grid gap-2">
+  <figure class="grid gap-3 rounded-xl bg-card p-4 shadow-panel">
     <figcaption class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-      <span class="font-medium text-foreground">{{ t('logs.chart.title') }}</span>
+      <span class="text-sm font-medium text-foreground">{{ t('logs.chart.title') }}</span>
       <span v-for="group in GROUPS" :key="group" class="inline-flex items-center gap-1.5">
         <span class="size-2.5 rounded-sm" :style="{ background: FILL[group] }" aria-hidden="true" />
         {{ t(`logs.chart.groups.${group}`) }}

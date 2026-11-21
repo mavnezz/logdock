@@ -303,7 +303,7 @@ async function save(): Promise<void> {
     <Alert v-if="update.error.value" variant="destructive">{{
       problemMessage(update.error.value)
     }}</Alert>
-    <Alert v-if="saved">{{ t('settings.saved') }}</Alert>
+    <Alert v-if="saved" variant="success">{{ t('settings.saved') }}</Alert>
     <div>
       <Button type="submit" :disabled="update.isPending.value">{{ t('common.save') }}</Button>
     </div>

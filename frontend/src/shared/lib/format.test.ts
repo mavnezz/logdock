@@ -5,6 +5,7 @@ import { setLocale } from '@/shared/i18n'
 import {
   formatBytes,
   formatDay,
+  formatTick,
   formatDateTime,
   formatDuration,
   formatNumber,
@@ -29,6 +30,10 @@ describe('formatting', () => {
     expect(formatNumber(12345)).toBe('12,345')
     expect(formatDay('2026-11-20')).toBe('20 Nov 2026')
     expect(formatDay('soon')).toBe('soon')
+    const day = 86_400_000
+    expect(formatTick('2026-11-20T09:05:00Z', day)).toMatch(/^\d{2}:05$/)
+    expect(formatTick('2026-11-20T09:05:00Z', 7 * day)).toBe('20 Nov')
+    expect(formatTick('later', day)).toBe('later')
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(1536)).toBe('1.5 KiB')
     expect(formatBytes(50 * 1024 ** 3)).toBe('50 GiB')
