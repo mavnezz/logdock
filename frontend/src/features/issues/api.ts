@@ -15,6 +15,9 @@ export type ChangeIssue = Schemas['ChangeIssueRequest']
 
 export const STATUSES = ['unresolved', 'resolved', 'muted', 'all'] as const
 export type StatusFilter = (typeof STATUSES)[number]
+/** Errors, as Sentry shows them first; performance issues when asked. */
+export const CATEGORIES = ['error', 'performance', 'all'] as const
+export type CategoryFilter = (typeof CATEGORIES)[number]
 export const SORTS = ['last_seen', 'first_seen', 'count', 'users'] as const
 export type Sort = (typeof SORTS)[number]
 
@@ -22,6 +25,7 @@ export interface IssueFilters {
   project: number | null
   environment: number | null
   status: StatusFilter
+  category: CategoryFilter
   sort: Sort
   q: string
   /** Only issues that first appeared in this release. */
@@ -40,6 +44,7 @@ export function useIssues(filters: MaybeRefOrGetter<IssueFilters>) {
       const f = toValue(filters)
       const query: Record<string, string> = {
         status: f.status,
+        category: f.category,
         sort: f.sort,
         // One more than shown tells whether a next page exists.
         limit: String(PAGE_SIZE + 1),

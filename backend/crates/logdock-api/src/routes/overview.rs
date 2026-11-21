@@ -85,7 +85,8 @@ pub struct ActiveIssueDto {
     pub users: u64,
 }
 
-/// Error events over the range, and their issues.
+/// Error events over the range, and their issues; performance issues are
+/// left out.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Errors {
     /// Whole hours: events are counted per hour.

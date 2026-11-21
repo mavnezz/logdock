@@ -204,7 +204,8 @@ services:
   (N+1), a `SELECT` over 1 s, a request over 2 s, and a job over its
   threshold (none by default). Each is an issue of its own, mailed when new,
   with the request's flow on its page; a problem is counted at most once a
-  minute. The project's *Settings* change the thresholds, also per route or
+  minute. The issue list shows the errors first, as Sentry does; its
+  *Kind* filter shows the performance issues, or both. The project's *Settings* change the thresholds, also per route or
   job (`POST /payments = 5000`).
 - **What an error keeps of its request**, as Sentry shows it: every header,
   with credentials (`Authorization`, `Cookie`, CSRF tokens) blanked; the body,

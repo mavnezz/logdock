@@ -8,7 +8,7 @@ use axum::http::StatusCode;
 use logdock_identity::domain::Permission;
 use logdock_issues::application::ports::{EventSummary, IssueQuery, IssueSort, IssueSummary};
 use logdock_issues::application::{IssueDetail, StatusChange};
-use logdock_issues::domain::{self as issues, ErrorEvent, Frame, IssueId, IssueStatus};
+use logdock_issues::domain::{self as issues, ErrorEvent, Frame, IssueCategory, IssueId, IssueStatus};
 use logdock_kernel::{EnvironmentId, ProjectId, Timestamp};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -35,6 +35,9 @@ pub struct Issue {
     pub id: i64,
     pub project_id: i64,
     pub environment_id: i64,
+    /// `error`, or `performance`: a problem Logdock found in a trace (an
+    /// N+1 query, a slow query, request or job).
+    pub category: String,
     pub title: String,
     pub culprit: Option<String>,
     /// `debug`, `info`, `warning`, `error` or `fatal`: the worst seen.
@@ -68,6 +71,7 @@ impl From<&issues::Issue> for Issue {
             id: issue.id.get(),
             project_id: issue.scope.project.get(),
             environment_id: issue.scope.environment.get(),
+            category: issue.category.as_str().to_owned(),
             title: issue.title.clone(),
             culprit: issue.culprit.clone(),
             level: issue.level.as_str().to_owned(),
@@ -113,6 +117,9 @@ pub struct IssueFilters {
     pub environment: Option<String>,
     /// `unresolved` (the default), `resolved`, `muted` or `all`.
     pub status: Option<String>,
+    /// `error` (the default), `performance` (N+1 queries, slow queries,
+    /// requests and jobs) or `all`.
+    pub category: Option<String>,
     /// Words in the title or culprit, and tags of its events:
     /// `user.email:ada@example.com`, `url:"https://shop/cart"`,
     /// `transaction:/orders*` (a prefix), `!browser:Safari` (without it).
@@ -145,6 +152,13 @@ async fn list_issues(
         status @ ("unresolved" | "resolved" | "muted") => Some(status.to_owned()),
         other => return Err(ApiError::BadRequest(format!("{other:?} is no status"))),
     };
+    let category = match filters.category.as_deref().unwrap_or("error") {
+        "all" => None,
+        other => Some(
+            IssueCategory::parse(other)
+                .ok_or_else(|| ApiError::BadRequest(format!("{other:?} is no category")))?,
+        ),
+    };
     let sort = match filters.sort.as_deref().unwrap_or("last_seen") {
         "last_seen" => IssueSort::LastSeen,
         "first_seen" => IssueSort::FirstSeen,
@@ -156,6 +170,7 @@ async fn list_issues(
         projects: ids(&filters.project)?.into_iter().map(ProjectId::new).collect(),
         environments: ids(&filters.environment)?.into_iter().map(EnvironmentId::new).collect(),
         status,
+        category,
         text: filters.q,
         first_release: filters.release.filter(|r| !r.trim().is_empty()),
         tags: Vec::new(),

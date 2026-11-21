@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use logdock_kernel::{EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
 
-use crate::domain::{ErrorEvent, EventLevel, Issue, IssueId, NewIssue, TagFilter};
+use crate::domain::{ErrorEvent, EventLevel, Issue, IssueCategory, IssueId, NewIssue, TagFilter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IssueSort {
@@ -22,6 +22,8 @@ pub struct IssueQuery {
     pub environments: Vec<EnvironmentId>,
     /// `unresolved`, `resolved` or `muted`; all when `None`.
     pub status: Option<String>,
+    /// Errors or performance issues; both when `None`.
+    pub category: Option<IssueCategory>,
     /// Words that appear in the title or culprit.
     pub text: Option<String>,
     /// Tags the issue's events had (or, negated, never had).
@@ -42,7 +44,7 @@ pub struct IssueSummary {
     pub users: u64,
 }
 
-/// The errors of some scopes over a range.
+/// The errors of some scopes over a range; performance issues are left out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActivityQuery {
     pub projects: Vec<ProjectId>,
@@ -151,7 +153,8 @@ pub trait IssueRepository: Send + Sync {
     async fn releases(&self, id: IssueId) -> Result<Vec<ReleaseCount>, PortError>;
 
     /// Errors per release, last seen first, of the issues in `projects` and
-    /// `environments` (all when empty); at most `limit` releases.
+    /// `environments` (all when empty); at most `limit` releases. Performance
+    /// issues are left out.
     async fn errors_by_release(
         &self,
         projects: &[ProjectId],
@@ -161,7 +164,7 @@ pub trait IssueRepository: Send + Sync {
 
     async fn latest_event(&self, id: IssueId) -> Result<Option<Value>, PortError>;
 
-    /// What the issues of some scopes did in a range.
+    /// What the error issues of some scopes did in a range.
     async fn activity(&self, query: &ActivityQuery) -> Result<ErrorActivity, PortError>;
 }
 

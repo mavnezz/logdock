@@ -252,6 +252,11 @@ const de: Messages = {
     searchHint: 'Wörter im Titel oder im Ort, oder Tags',
     status: 'Status',
     statuses: { unresolved: 'Offen', resolved: 'Gelöst', muted: 'Stumm', all: 'Alle' },
+    category: 'Art',
+    categories: { error: 'Fehler', performance: 'Performance', all: 'Fehler und Performance' },
+    performance: 'Performance',
+    emptyPerformance:
+      'Keine Performance-Issues. N+1-Queries sowie Queries, Requests und Jobs über ihrer Schwelle (in den Projekteinstellungen) erscheinen hier.',
     sort: 'Reihenfolge',
     sorts: {
       last_seen: 'Zuletzt gesehen',
@@ -568,7 +573,7 @@ const de: Messages = {
       'Wie viele Tage eine Stage ihre Logs, Fehler und Traces behält, 1 bis 3650; leer behält sie so lange, wie der Server sagt. Eine Stage mit eigenen Tagen bekommt eigene Dateien, ihre Daten verschwinden also, wenn ihre Tage um sind. Gilt für Daten, die ab jetzt ankommen.',
     performance: 'Performance-Issues',
     performanceHint:
-      'Ein Request, Job oder eine Query über der Schwelle sowie dieselbe Query immer wieder (N+1) werden zu Issues und wie neue per Mail gemeldet. In Millisekunden; leer ist aus.',
+      'Ein Request, Job oder eine Query über der Schwelle sowie dieselbe Query immer wieder (N+1) werden zu Issues und wie neue per Mail gemeldet. Die Issue-Liste zeigt sie unter Performance. In Millisekunden; leer ist aus.',
     requestMs: 'Requests über (ms)',
     jobMs: 'Jobs über (ms)',
     slowQueryMs: 'SELECTs über (ms)',

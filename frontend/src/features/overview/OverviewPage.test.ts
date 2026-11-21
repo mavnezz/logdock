@@ -58,6 +58,7 @@ function overview(empty = false) {
               id: 5,
               project_id: 3,
               environment_id: 1,
+              category: 'error',
               title: 'PaymentFailed: Payment for order 42 failed',
               culprit: 'App\\Payments\\Gateway::charge',
               level: 'error',

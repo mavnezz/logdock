@@ -18,7 +18,16 @@ import { NativeSelect } from '@/shared/ui/native-select'
 import { EmptyState, PageHeader } from '@/shared/ui/page'
 import { Pager } from '@/shared/ui/pager'
 
-import { type IssueFilters, SORTS, type Sort, STATUSES, type StatusFilter, useIssues } from './api'
+import {
+  CATEGORIES,
+  type CategoryFilter,
+  type IssueFilters,
+  SORTS,
+  type Sort,
+  STATUSES,
+  type StatusFilter,
+  useIssues,
+} from './api'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -37,6 +46,9 @@ function pick<T extends string>(value: string, allowed: readonly T[], fallback: 
 const status = computed(() =>
   pick<StatusFilter>(one(route.query, 'status'), STATUSES, 'unresolved'),
 )
+const category = computed(() =>
+  pick<CategoryFilter>(one(route.query, 'category'), CATEGORIES, 'error'),
+)
 const sort = computed(() => pick<Sort>(one(route.query, 'sort'), SORTS, 'last_seen'))
 const q = computed(() => one(route.query, 'q'))
 const release = computed(() => one(route.query, 'release'))
@@ -47,6 +59,7 @@ watch(q, (value) => (typed.value = value))
 function update(changes: Record<string, string>): void {
   const query: Record<string, string> = {
     status: status.value,
+    category: category.value,
     sort: sort.value,
     q: q.value,
     release: release.value,
@@ -56,6 +69,7 @@ function update(changes: Record<string, string>): void {
   }
   if (query.page === '1') delete query.page
   if (query.status === 'unresolved') delete query.status
+  if (query.category === 'error') delete query.category
   if (query.sort === 'last_seen') delete query.sort
   if (!query.q) delete query.q
   if (!query.release) delete query.release
@@ -66,6 +80,7 @@ const filters = computed<IssueFilters>(() => ({
   project: scope.project,
   environment: scope.environment,
   status: status.value,
+  category: category.value,
   sort: sort.value,
   q: q.value,
   release: release.value,
@@ -107,6 +122,16 @@ const several = computed(() => scope.project === null)
         </option>
       </NativeSelect>
       <NativeSelect
+        :model-value="category"
+        class="w-52"
+        :aria-label="t('issues.category')"
+        @update:model-value="(value) => update({ category: String(value) })"
+      >
+        <option v-for="option in CATEGORIES" :key="option" :value="option">
+          {{ t(`issues.categories.${option}`) }}
+        </option>
+      </NativeSelect>
+      <NativeSelect
         :model-value="sort"
         class="w-44"
         :aria-label="t('issues.sort')"
@@ -135,7 +160,13 @@ const several = computed(() => scope.project === null)
     <EmptyState
       v-else-if="list.length === 0 && page === 1"
       :title="t('issues.empty')"
-      :description="status === 'unresolved' ? t('issues.emptyHint') : undefined"
+      :description="
+        category === 'performance'
+          ? t('issues.emptyPerformance')
+          : status === 'unresolved'
+            ? t('issues.emptyHint')
+            : undefined
+      "
     />
     <div v-else class="overflow-hidden rounded-lg border">
       <div
@@ -167,6 +198,11 @@ const several = computed(() => scope.project === null)
             <p
               class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
             >
+              <Badge
+                v-if="category === 'all' && issue.category === 'performance'"
+                variant="outline"
+                >{{ t('issues.performance') }}</Badge
+              >
               <span v-if="issue.culprit" class="truncate font-mono">{{ issue.culprit }}</span>
               <span v-if="several">{{ names.project(issue.project_id) }}</span>
               <span>{{ names.environment(issue.environment_id) }}</span>

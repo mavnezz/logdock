@@ -355,8 +355,11 @@ Contexts `logdock-performance` and `logdock-monitors`, checked against sentry-la
   `PerformanceRules`, kept with its settings): an N+1 query (5 or more of one normalized statement in a row under one
   parent, 50 ms or more together, as Sentry detects it), a `SELECT` over its threshold (1 s), a request (2 s) or job
   (off) over its threshold, also per route or job. Each finding becomes an error event of level `warning` with its own
-  fingerprint (`performance`, kind, transaction, statement), so it is an issue like any other: mailed when new, with
-  its trace and the span to look at. A finding is reported once a minute per stage at most.
+  fingerprint (`performance`, kind, transaction, statement) and the tag `issue.type: performance`, so it is an issue
+  like any other: mailed when new, with its trace and the span to look at. A finding is reported once a minute per
+  stage at most. Its issue has the category `performance`, others `error` (taken from the first event, kept in
+  `issues.category`): the issue list shows the errors, as Sentry's does, and the performance issues when asked
+  (`category=performance` or `all`); the overview and the releases count errors only.
 
 ### 4.4 Correlation
 

@@ -7,6 +7,7 @@ export function issue(overrides: Partial<Issue> = {}): Issue {
     id: 5,
     project_id: 3,
     environment_id: 1,
+    category: 'error',
     title: 'PaymentFailed: Payment for order 42 failed',
     culprit:
       'App\\Http\\Controllers\\PaymentController::pay in /app/Http/Controllers/PaymentController.php',

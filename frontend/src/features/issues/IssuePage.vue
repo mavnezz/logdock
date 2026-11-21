@@ -123,6 +123,9 @@ const statusText = computed(() => {
       <header class="grid gap-3">
         <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <LevelBadge :level="issue.level" />
+          <Badge v-if="issue.category === 'performance'" variant="outline">{{
+            t('issues.performance')
+          }}</Badge>
           <span
             >{{ names.project(issue.project_id) }} /
             {{ names.environment(issue.environment_id) }}</span
@@ -330,7 +333,12 @@ const statusText = computed(() => {
                   <RouterLink
                     :to="{
                       path: '/issues',
-                      query: { q: tagSearch(tag.key, value.value), status: 'all' },
+                      query: {
+                        q: tagSearch(tag.key, value.value),
+                        status: 'all',
+                        // The issues of its own kind.
+                        ...(issue.category === 'error' ? {} : { category: issue.category }),
+                      },
                     }"
                     class="relative flex justify-between gap-2 rounded-sm px-1.5 py-0.5 hover:underline"
                     :title="t('issues.tagIssues', { value: value.value })"

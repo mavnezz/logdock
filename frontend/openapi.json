@@ -516,6 +516,15 @@
             }
           },
           {
+            "name": "category",
+            "in": "query",
+            "description": "`error` (the default), `performance` (N+1 queries, slow queries,\nrequests and jobs) or `all`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "q",
             "in": "query",
             "description": "Words in the title or culprit, and tags of its events:\n`user.email:ada@example.com`, `url:\"https://shop/cart\"`,\n`transaction:/orders*` (a prefix), `!browser:Safari` (without it).",
@@ -3307,7 +3316,7 @@
       },
       "Errors": {
         "type": "object",
-        "description": "Error events over the range, and their issues.",
+        "description": "Error events over the range, and their issues; performance issues are\nleft out.",
         "required": [
           "bucket_seconds",
           "buckets",
@@ -3783,6 +3792,7 @@
           "id",
           "project_id",
           "environment_id",
+          "category",
           "title",
           "level",
           "status",
@@ -3791,6 +3801,10 @@
           "count"
         ],
         "properties": {
+          "category": {
+            "type": "string",
+            "description": "`error`, or `performance`: a problem Logdock found in a trace (an\nN+1 query, a slow query, request or job)."
+          },
           "count": {
             "type": "integer",
             "format": "int64",

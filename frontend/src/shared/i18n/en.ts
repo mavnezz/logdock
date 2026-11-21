@@ -251,6 +251,11 @@ const en = {
     searchHint: 'Words in the title or where it happened, or tags',
     status: 'Status',
     statuses: { unresolved: 'Unresolved', resolved: 'Resolved', muted: 'Muted', all: 'All' },
+    category: 'Kind',
+    categories: { error: 'Errors', performance: 'Performance', all: 'Errors and performance' },
+    performance: 'Performance',
+    emptyPerformance:
+      'No performance issues. N+1 queries, and queries, requests and jobs over their thresholds (in the project’s settings) appear here.',
     sort: 'Order',
     sorts: {
       last_seen: 'Last seen',
@@ -563,7 +568,7 @@ const en = {
       'How many days a stage keeps its logs, errors and traces, 1 to 3650; empty keeps them as long as the server says. A stage with days of its own gets files of its own, so its data goes when its days are over. Applies to data received from now on.',
     performance: 'Performance issues',
     performanceHint:
-      'A request, job or query over its threshold, and the same query run again and again (N+1), become issues and are mailed as new ones. In milliseconds; empty is off.',
+      'A request, job or query over its threshold, and the same query run again and again (N+1), become issues and are mailed as new ones. The issue list shows them under Performance. In milliseconds; empty is off.',
     requestMs: 'Requests over (ms)',
     jobMs: 'Jobs over (ms)',
     slowQueryMs: 'SELECTs over (ms)',

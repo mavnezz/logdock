@@ -907,7 +907,10 @@ export interface components {
             count: number;
             start: string;
         };
-        /** @description Error events over the range, and their issues. */
+        /**
+         * @description Error events over the range, and their issues; performance issues are
+         *     left out.
+         */
         Errors: {
             /**
              * Format: int64
@@ -1052,6 +1055,11 @@ export interface components {
             skipped: number;
         };
         Issue: {
+            /**
+             * @description `error`, or `performance`: a problem Logdock found in a trace (an
+             *     N+1 query, a slow query, request or job).
+             */
+            category: string;
             /** Format: int64 */
             count: number;
             culprit?: string | null;
@@ -2103,6 +2111,11 @@ export interface operations {
                 environment?: string;
                 /** @description `unresolved` (the default), `resolved`, `muted` or `all`. */
                 status?: string;
+                /**
+                 * @description `error` (the default), `performance` (N+1 queries, slow queries,
+                 *     requests and jobs) or `all`.
+                 */
+                category?: string;
                 /**
                  * @description Words in the title or culprit, and tags of its events:
                  *     `user.email:ada@example.com`, `url:"https://shop/cart"`,

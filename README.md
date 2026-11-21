@@ -11,7 +11,7 @@ sends to Logdock, and one web interface searches across all of them.
 - **Errors:** exceptions grouped into issues, with their request as Sentry keeps it, the request's flow as a timeline,
   the users affected, search by tag, their state across releases and e-mail on new and returning ones.
 - **Monitoring:** requests, jobs, queries, outgoing requests, cache, queues, releases and scheduled tasks; N+1 queries,
-  slow queries and requests over their threshold become issues.
+  slow queries and requests over their threshold become performance issues, listed beside the errors when asked.
 - **Other logs:** Nginx's and other containers' output through Vector or Fluent Bit, and a buffered mode for Laravel's
   logs.
 - **Storage:** what each day, kind and stage takes and where it is heading; each stage can keep its data for days of

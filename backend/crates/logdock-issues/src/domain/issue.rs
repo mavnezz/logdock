@@ -1,6 +1,6 @@
 use logdock_kernel::{Scope, Timestamp};
 
-use super::EventLevel;
+use super::{ErrorEvent, EventLevel};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IssueId(i64);
@@ -43,11 +43,52 @@ impl IssueStatus {
     }
 }
 
+/// The tag of the performance problems Logdock reports as issues.
+pub const CATEGORY_TAG: &str = "issue.type";
+
+/// What kind of problem an issue is, as Sentry sorts them: an error the app
+/// reported, or a performance problem Logdock found in its traces (an N+1
+/// query, a slow query, request or job). Lists show the errors unless asked
+/// for the others.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum IssueCategory {
+    #[default]
+    Error,
+    Performance,
+}
+
+impl IssueCategory {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Performance => "performance",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "error" => Some(Self::Error),
+            "performance" => Some(Self::Performance),
+            _ => None,
+        }
+    }
+
+    /// The category of the issue `event` opens: performance if it carries
+    /// the tag Logdock gives the problems it found.
+    pub fn of(event: &ErrorEvent) -> Self {
+        match event.tag(CATEGORY_TAG) {
+            Some("performance") => Self::Performance,
+            _ => Self::Error,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
     pub id: IssueId,
     pub scope: Scope,
     pub fingerprint: String,
+    pub category: IssueCategory,
     pub title: String,
     pub culprit: Option<String>,
     pub level: EventLevel,
@@ -66,6 +107,7 @@ pub struct Issue {
 pub struct NewIssue {
     pub scope: Scope,
     pub fingerprint: String,
+    pub category: IssueCategory,
     pub title: String,
     pub culprit: Option<String>,
     pub level: EventLevel,
@@ -141,7 +183,7 @@ impl Issue {
 
 #[cfg(test)]
 mod tests {
-    use logdock_kernel::{EnvironmentId, ProjectId};
+    use logdock_kernel::{EnvironmentId, ProjectId, Value};
 
     use super::*;
 
@@ -150,6 +192,7 @@ mod tests {
             id: IssueId::new(1),
             scope: Scope { project: ProjectId::new(1), environment: EnvironmentId::new(1) },
             fingerprint: "f".into(),
+            category: IssueCategory::Error,
             title: "t".into(),
             culprit: None,
             level: EventLevel::Warning,
@@ -166,6 +209,21 @@ mod tests {
 
     fn at(seconds: i64) -> Timestamp {
         Timestamp::from_unix_seconds(seconds)
+    }
+
+    #[test]
+    fn the_problems_logdock_found_are_performance_issues() {
+        let event = |key: &str, value: &str| {
+            let tags = Value::Object(vec![(key.to_owned(), Value::String(value.into()))]);
+            ErrorEvent::from_payload(Value::Object(vec![("tags".into(), tags)]), Some("e"))
+        };
+        assert_eq!(IssueCategory::of(&event(CATEGORY_TAG, "performance")), IssueCategory::Performance);
+        assert_eq!(IssueCategory::of(&event(CATEGORY_TAG, "other")), IssueCategory::Error);
+        assert_eq!(IssueCategory::of(&event("service", "web")), IssueCategory::Error);
+        for category in [IssueCategory::Error, IssueCategory::Performance] {
+            assert_eq!(IssueCategory::parse(category.as_str()), Some(category));
+        }
+        assert_eq!(IssueCategory::parse("cron"), None);
     }
 
     #[test]

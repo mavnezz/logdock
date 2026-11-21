@@ -9,7 +9,7 @@ use logdock_issues::application::ports::{
     IssueSort, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
 use logdock_issues::domain::{
-    ErrorEvent, EventLevel, Issue, IssueId, IssueStatus, NewIssue, USER, tags_of, values_kept,
+    ErrorEvent, EventLevel, Issue, IssueCategory, IssueId, IssueStatus, NewIssue, USER, tags_of, values_kept,
 };
 use logdock_kernel::{Day, EnvironmentId, PortError, ProjectId, Scope, Timestamp, Value};
 use logdock_retention::domain::Kind;
@@ -66,6 +66,7 @@ fn issue(row: &SqliteRow) -> Issue {
             environment: EnvironmentId::new(row.get("environment_id")),
         },
         fingerprint: row.get("fingerprint"),
+        category: IssueCategory::parse(row.get("category")).unwrap_or_default(),
         title: row.get("title"),
         culprit: row.get("culprit"),
         level: EventLevel::parse(row.get("level")).unwrap_or(EventLevel::Error),
@@ -80,7 +81,7 @@ fn issue(row: &SqliteRow) -> Issue {
     }
 }
 
-const COLUMNS: &str = "id, project_id, environment_id, fingerprint, title, culprit, level, status, resolved_at, \
+const COLUMNS: &str = "id, project_id, environment_id, fingerprint, category, title, culprit, level, status, resolved_at, \
     resolved_in_next_release, muted_until, muted_remaining, first_seen, last_seen, count, first_release, last_release, \
     regressed_at, last_event_id";
 
@@ -97,13 +98,15 @@ impl IssueRepository for SqliteIssues {
 
     async fn create(&self, new: NewIssue, event: &Value) -> Result<Option<Issue>, PortError> {
         let id: Option<i64> = sqlx::query_scalar(
-            "INSERT INTO issues (project_id, environment_id, fingerprint, title, culprit, level, first_seen, last_seen, \
-             count, first_release, last_release, last_event_id, last_event) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) \
+            "INSERT INTO issues (project_id, environment_id, fingerprint, category, title, culprit, level, first_seen, \
+             last_seen, count, first_release, last_release, last_event_id, last_event) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) \
              ON CONFLICT (project_id, environment_id, fingerprint) DO NOTHING RETURNING id",
         )
         .bind(new.scope.project.get())
         .bind(new.scope.environment.get())
         .bind(&new.fingerprint)
+        .bind(new.category.as_str())
         .bind(&new.title)
         .bind(&new.culprit)
         .bind(new.level.as_str())
@@ -196,6 +199,9 @@ impl IssueRepository for SqliteIssues {
         if let Some(status) = &query.status {
             sql.push(" AND i.status = ").push_bind(status.clone());
         }
+        if let Some(category) = query.category {
+            sql.push(" AND i.category = ").push_bind(category.as_str());
+        }
         if let Some(release) = &query.first_release {
             sql.push(" AND i.first_release = ").push_bind(release.clone());
         }
@@ -283,6 +289,7 @@ impl IssueRepository for SqliteIssues {
 
     async fn activity(&self, query: &ActivityQuery) -> Result<ErrorActivity, PortError> {
         let in_scope = |sql: &mut QueryBuilder<Sqlite>| {
+            sql.push(" AND i.category = ").push_bind(IssueCategory::Error.as_str());
             if !query.projects.is_empty() {
                 sql.push(" AND i.project_id IN (");
                 let mut list = sql.separated(", ");
@@ -409,6 +416,7 @@ impl IssueRepository for SqliteIssues {
             projects: &[ProjectId],
             environments: &[EnvironmentId],
         ) {
+            sql.push(format!(" AND {alias}.category = ")).push_bind(IssueCategory::Error.as_str());
             if !projects.is_empty() {
                 sql.push(format!(" AND {alias}.project_id IN ("));
                 let mut list = sql.separated(", ");
@@ -863,6 +871,7 @@ mod tests {
         let new = NewIssue {
             scope,
             fingerprint: "f1".into(),
+            category: IssueCategory::Error,
             title: "RuntimeException: boom".into(),
             culprit: Some("go in /app/X.php".into()),
             level: EventLevel::Error,
@@ -957,6 +966,30 @@ mod tests {
         assert_eq!(issues.list(&by(vec![tag("user", "id:9", false, true)]), at).await.unwrap().len(), 1);
         let sorted = IssueQuery { limit: 10, sort: IssueSort::Users, ..Default::default() };
         assert_eq!(issues.list(&sorted, at).await.unwrap()[0].users, 2);
+
+        // A performance issue: listed when asked for, left out of the errors.
+        let n_plus_one = NewIssue {
+            scope,
+            fingerprint: "f2".into(),
+            category: IssueCategory::Performance,
+            title: "N+1 query: SELECT * FROM users WHERE id = ?".into(),
+            culprit: Some("POST /orders".into()),
+            level: EventLevel::Warning,
+            seen: at,
+            release: Some("r1".into()),
+            event_id: "p1".into(),
+        };
+        let slow = issues.create(n_plus_one, &payload("r1")).await.unwrap().unwrap();
+        assert_eq!(issues.get(slow.id).await.unwrap().unwrap().category, IssueCategory::Performance);
+        issues.record(slow.id, at, Some("r1"), &[]).await.unwrap();
+        let of = |category: Option<IssueCategory>| IssueQuery { limit: 10, category, ..Default::default() };
+        let ids = |list: Vec<IssueSummary>| list.iter().map(|s| s.issue.id).collect::<Vec<_>>();
+        assert_eq!(ids(issues.list(&of(Some(IssueCategory::Error)), at).await.unwrap()), [issue.id]);
+        assert_eq!(ids(issues.list(&of(Some(IssueCategory::Performance)), at).await.unwrap()), [slow.id]);
+        assert_eq!(issues.list(&of(None), at).await.unwrap().len(), 2);
+        let releases = issues.errors_by_release(&[], &[], 10).await.unwrap();
+        let r1 = releases.iter().find(|r| r.release == "r1").unwrap();
+        assert_eq!((r1.events, r1.issues, r1.new_issues), (1, 1, 1), "errors only");
 
         // What the issues did in a range: events per bucket, the busiest.
         let activity = ActivityQuery {

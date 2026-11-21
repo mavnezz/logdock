@@ -50,6 +50,45 @@ describe('the issues page', () => {
     expect(last.searchParams.get('q')).toBe('payment')
   })
 
+  it('shows the errors, and the performance issues when asked', async () => {
+    const n1 = listed({
+      id: 8,
+      category: 'performance',
+      level: 'warning',
+      title: 'N+1 query: select * from items where order_id = ?',
+    })
+    const api = stubApi({
+      'GET /api/v1/issues': (request) =>
+        new URL(request.url).searchParams.get('category') === 'error' ? [listed()] : [listed(), n1],
+      'GET /api/v1/projects': () => [project()],
+    })
+    const { wrapper, router } = mountWith(IssuesPage, { path: '/issues' })
+    await flushPromises()
+    const first = new URL(api.calls.find((c) => c.url.includes('/issues'))!.url)
+    expect(first.searchParams.get('category')).toBe('error')
+    expect(wrapper.text()).not.toContain('N+1 query')
+
+    await wrapper.find('select[aria-label="Kind"]').setValue('all')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ category: 'all' })
+    const rows = wrapper.findAll('li')
+    expect(rows.find((r) => r.text().includes('N+1 query'))!.text()).toContain('Performance')
+    expect(rows.find((r) => r.text().includes('PaymentFailed'))!.text()).not.toContain(
+      'Performance',
+    )
+
+    await wrapper.find('select[aria-label="Kind"]').setValue('error')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({})
+  })
+
+  it('says where performance issues come from when there are none', async () => {
+    stubApi({ 'GET /api/v1/issues': () => [], 'GET /api/v1/projects': () => [] })
+    const { wrapper } = mountWith(IssuesPage, { path: '/issues?category=performance' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('No performance issues')
+  })
+
   it('pages through issues, and starts over when a filter changes', async () => {
     const api = stubApi({
       'GET /api/v1/issues': (request) => {

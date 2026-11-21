@@ -275,11 +275,13 @@ async function main() {
     return `GET /scenario/work ${work.count}×, p95 ${work.p95_ms} ms`
   })
   await check('an N+1 query becomes a performance issue', async () => {
+    const performance = `/api/v1/issues?project=${project.id}&limit=100&category=performance`
     const issue = await eventually('the N+1 issue', async () =>
-      (await logdock.get(`/api/v1/issues?project=${project.id}&limit=100`)).find((i) =>
-        i.title.startsWith('N+1 query:'),
-      ),
+      (await logdock.get(performance)).find((i) => i.title.startsWith('N+1 query:')),
     )
+    expect(issue.category === 'performance', `category ${issue.category}`)
+    const errors = await logdock.get(`/api/v1/issues?project=${project.id}&limit=100`)
+    expect(!errors.some((i) => i.id === issue.id), 'the error list leaves it out')
     expect(issue.culprit === 'GET /scenario/n-plus-one', `culprit ${issue.culprit}`)
     expect(issue.level === 'warning', `level ${issue.level}`)
     const detail = await logdock.get(`/api/v1/issues/${issue.id}`)

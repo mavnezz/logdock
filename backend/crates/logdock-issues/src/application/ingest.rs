@@ -5,7 +5,7 @@ use logdock_kernel::{Scope, Timestamp, Value};
 
 use super::alerts::{NotifyPolicy, alert_mail};
 use super::{Context, IssueError, hours_ago};
-use crate::domain::{ErrorEvent, IssueId, NewIssue, fingerprint, tags_of};
+use crate::domain::{ErrorEvent, IssueCategory, IssueId, NewIssue, fingerprint, tags_of};
 
 /// What became of an event.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +62,7 @@ impl IngestEvent {
                 let new = NewIssue {
                     scope,
                     fingerprint: grouping.hash.clone(),
+                    category: IssueCategory::of(&event),
                     title: grouping.title.clone(),
                     culprit: grouping.culprit.clone(),
                     level: event.level,

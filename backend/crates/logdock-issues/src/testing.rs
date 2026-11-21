@@ -13,7 +13,7 @@ use crate::application::ports::{
     IssueSort, IssueSummary, ReleaseCount, ReleaseErrors, StoredEvent, TagCount, TagKey,
 };
 use crate::application::{IssuePorts, IssueUseCases};
-use crate::domain::{ErrorEvent, Issue, IssueId, IssueStatus, NewIssue};
+use crate::domain::{ErrorEvent, Issue, IssueCategory, IssueId, IssueStatus, NewIssue};
 
 #[derive(Default)]
 pub struct MemoryIssues {
@@ -69,6 +69,7 @@ impl IssueRepository for MemoryIssues {
             id: IssueId::new(self.next.fetch_add(1, Ordering::SeqCst) + 1),
             scope: new.scope,
             fingerprint: new.fingerprint,
+            category: new.category,
             title: new.title,
             culprit: new.culprit,
             level: new.level,
@@ -109,6 +110,7 @@ impl IssueRepository for MemoryIssues {
             .unwrap()
             .iter()
             .filter(|(i, _)| query.status.as_deref().is_none_or(|s| s == i.status.name()))
+            .filter(|(i, _)| query.category.is_none_or(|c| c == i.category))
             .filter(|(i, _)| {
                 query.text.as_deref().is_none_or(|t| i.title.to_lowercase().contains(&t.to_lowercase()))
             })
@@ -197,7 +199,8 @@ impl IssueRepository for MemoryIssues {
     ) -> Result<Vec<ReleaseErrors>, PortError> {
         let issues = self.issues.lock().unwrap().clone();
         let within = |issue: &Issue| {
-            (projects.is_empty() || projects.contains(&issue.scope.project))
+            issue.category == IssueCategory::Error
+                && (projects.is_empty() || projects.contains(&issue.scope.project))
                 && (environments.is_empty() || environments.contains(&issue.scope.environment))
         };
         let mut out: Vec<ReleaseErrors> = Vec::new();
@@ -276,7 +279,8 @@ impl IssueRepository for MemoryIssues {
             .iter()
             .map(|(i, _)| i.clone())
             .filter(|i| {
-                (query.projects.is_empty() || query.projects.contains(&i.scope.project))
+                i.category == IssueCategory::Error
+                    && (query.projects.is_empty() || query.projects.contains(&i.scope.project))
                     && (query.environments.is_empty() || query.environments.contains(&i.scope.environment))
             })
             .collect();

@@ -81,13 +81,22 @@ async fn n_plus_one_queries_and_slow_requests_become_issues() {
 
     // Twelve of the same query in a row, 10 ms each.
     send(&app, project, &key, &request("0123456789abcdef0123456789abcdef", 200.0, 12, 10.0)).await;
-    let issues = eventually(&admin, "/api/v1/issues", |i| i.as_array().is_some_and(|i| !i.is_empty())).await;
+    let performance = "/api/v1/issues?category=performance";
+    let issues = eventually(&admin, performance, |i| i.as_array().is_some_and(|i| !i.is_empty())).await;
     assert_eq!(issues.as_array().unwrap().len(), 1, "{issues}");
     let issue = &issues[0];
+    assert_eq!(issue["category"], "performance");
     assert_eq!(issue["title"], "N+1 query: select * from items where order_id = ?");
     assert_eq!(issue["level"], "warning");
     assert_eq!(issue["culprit"], "GET /orders/{order}");
     let id = issue["id"].as_i64().unwrap();
+
+    // The issue list shows the errors, as Sentry's does; the others when asked.
+    assert_eq!(admin.get("/api/v1/issues").await.json(), json!([]));
+    assert_eq!(admin.get("/api/v1/issues?category=error").await.json(), json!([]));
+    assert_eq!(admin.get("/api/v1/issues?category=all").await.json()[0]["id"], id);
+    assert_eq!(admin.get("/api/v1/issues?category=cron").await.status, StatusCode::BAD_REQUEST);
+
     let detail = admin.get(&format!("/api/v1/issues/{id}")).await.json();
     let latest = &detail["latest"];
     assert_eq!(latest["contexts"]["performance"]["count"], 12);
@@ -108,7 +117,7 @@ async fn n_plus_one_queries_and_slow_requests_become_issues() {
     assert_eq!(saved.status, StatusCode::OK, "{}", saved.text());
     assert_eq!(saved.json()["settings"]["performance"]["overrides"][0]["ms"], 100);
     send(&app, project, &key, &request("2123456789abcdef0123456789abcdef", 300.0, 12, 10.0)).await;
-    let issues = eventually(&admin, "/api/v1/issues", |i| i.as_array().is_some_and(|i| i.len() == 2)).await;
+    let issues = eventually(&admin, performance, |i| i.as_array().is_some_and(|i| i.len() == 2)).await;
     let titles: Vec<&str> = issues.as_array().unwrap().iter().map(|i| i["title"].as_str().unwrap()).collect();
     assert!(titles.contains(&"Slow request: GET /orders/{order} over 100 ms"), "{titles:?}");
     app.stop().await;

@@ -18,10 +18,10 @@ const hours = Array.from({ length: 14 * 24 }, (_, i) => ({
   count: i === 14 * 24 - 1 ? 3 : 0,
 }))
 
-function api(status: string = 'unresolved') {
+function api(status: string = 'unresolved', category: string = 'error') {
   return stubApi({
     'GET /api/v1/issues/5': () => ({
-      issue: issue({ status }),
+      issue: issue({ status, category }),
       hours,
       releases: [{ release: '1.0.1', count: 4, first_seen: '', last_seen: '2026-11-18T09:15:02Z' }],
       latest: event(),
@@ -198,6 +198,7 @@ describe('an issue’s page', () => {
       .map((a) => decodeURIComponent(a.attributes('href')!.replaceAll('+', ' ')))
     expect(links).toContain('/issues?q=user:id:7&status=all')
     expect(links).toContain('/issues?q=transaction:"POST /orders/{order}/pay"&status=all')
+    expect(wrapper.find('header').text()).not.toContain('Performance')
     // The request as Sentry keeps it: every header, the body, the cookies' names.
     expect(text).toContain('[redacted]')
     expect(text).toContain('"order": 42')
@@ -210,6 +211,17 @@ describe('an issue’s page', () => {
 
     await wrapper.find('rect[data-bar]:last-of-type').trigger('mouseenter')
     expect(wrapper.find('[role="tooltip"]').exists()).toBe(true)
+  })
+
+  it('marks a performance issue, and its tags find others of its kind', async () => {
+    api('unresolved', 'performance')
+    const { wrapper } = mountWith(IssuePage, { props: { id: '5' }, attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('header').text()).toContain('Performance')
+    const links = wrapper
+      .findAll('aside a')
+      .map((a) => decodeURIComponent(a.attributes('href')!.replaceAll('+', ' ')))
+    expect(links).toContain('/issues?q=user:id:7&status=all&category=performance')
   })
 
   it('shows another event when one is picked', async () => {

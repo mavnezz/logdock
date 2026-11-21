@@ -34,7 +34,8 @@ const MAX_TEXT: usize = 200_000;
 const INSTRUCTIONS: &str = "Logdock holds the logs, errors and performance data of Laravel apps: \
 projects (one per app), each with stages (production, staging, …). Start with list_projects, \
 then overview for how a project or stage is doing. search_logs searches log entries (words, \"phrases\", key:value attributes, trace:<id>); \
-list_issues and get_issue show errors grouped into issues, with stack traces and the request; \
+list_issues and get_issue show errors grouped into issues, with stack traces and the request \
+(category performance lists the N+1 queries and slow requests Logdock found); \
 get_trace shows everything that carries one trace ID, across containers (the request, the jobs it \
 queued, their logs and errors); performance shows where requests, jobs, queries and outgoing \
 requests spend their time; list_queues shows how long queued jobs wait and run; list_releases compares releases; list_monitors \
@@ -212,7 +213,9 @@ impl Server {
             "list_issues" => {
                 let projects = self.projects().await?;
                 let mut query = scope(args, &projects)?;
-                for (arg, param) in [("status", "status"), ("query", "q"), ("sort", "sort")] {
+                for (arg, param) in
+                    [("status", "status"), ("category", "category"), ("query", "q"), ("sort", "sort")]
+                {
                     if let Some(value) = text(args, arg) {
                         query.push((param, value));
                     }
@@ -652,6 +655,10 @@ fn read_tools() -> Vec<Value> {
     let mut issues = scope_properties();
     issues.insert("status".into(), json!({"type": "string", "enum": ["unresolved", "resolved", "muted", "all"], "description": "unresolved by default."}));
     issues.insert(
+        "category".into(),
+        json!({"type": "string", "enum": ["error", "performance", "all"], "description": "error by default; performance are the N+1 queries, slow queries, requests and jobs Logdock found in the traces."}),
+    );
+    issues.insert(
         "query".into(),
         json!({"type": "string", "description": "Words in the title or culprit, and tags of the issue's events: user.email:ada@example.com, user:id:42, url:\"https://shop/cart\", transaction:/orders* (a prefix), browser:\"Chrome 131\", release:v2, !handled:yes (without it), or a tag of the app's own."}),
     );
@@ -700,7 +707,7 @@ fn read_tools() -> Vec<Value> {
         tool(
             "list_issues",
             "List issues",
-            "Errors grouped into issues: title, culprit, how often, the users affected, first and last seen, status and releases. Search by tag to find a user's issues or those of one URL or browser.",
+            "Errors grouped into issues: title, culprit, how often, the users affected, first and last seen, status and releases. Search by tag to find a user's issues or those of one URL or browser. Performance issues (N+1 queries, slow queries, requests and jobs) are listed with category performance.",
             issues,
             &[],
         ),
